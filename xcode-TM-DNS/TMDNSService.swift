@@ -65,6 +65,9 @@ final class TMDNSService: ObservableObject {
             await refreshAudit()
             lastUpdated = Date()
             errorMessage = nil
+            if shouldRecheckUpdateAfterVersionLoad {
+                await checkForUpdates()
+            }
         } catch {
             errorMessage = "Service offline"
         }
@@ -86,7 +89,11 @@ final class TMDNSService: ObservableObject {
             guard let packageAsset = release.packageAsset else {
                 throw UpdateError.noPackageAsset
             }
-            let currentVersion = installedVersion
+            guard let currentVersion = installedVersionForUpdate else {
+                availableUpdate = nil
+                updateStatus = userInitiated ? .failed("Service version unavailable") : .idle
+                return
+            }
             if isRelease(release.version, newerThan: currentVersion) {
                 availableUpdate = release.withPackageAsset(packageAsset)
                 updateStatus = .available(release.version)
@@ -255,12 +262,23 @@ final class TMDNSService: ObservableObject {
         }
     }
 
-    private var installedVersion: String {
-        if let version = dashboard?.version?.version, !version.isEmpty {
+    private var installedVersionForUpdate: String? {
+        if let version = dashboard?.version?.version, isPackagedVersion(version) {
             return version
         }
-        let bundleVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String
-        return bundleVersion ?? "dev"
+        return nil
+    }
+
+    private var shouldRecheckUpdateAfterVersionLoad: Bool {
+        guard installedVersionForUpdate != nil else {
+            return false
+        }
+        switch updateStatus {
+        case .idle, .checking, .available:
+            return true
+        case .current, .downloading, .verifying, .readyToInstall, .failed:
+            return false
+        }
     }
 
     private func startUpdateChecks() {
@@ -289,6 +307,10 @@ final class TMDNSService: ObservableObject {
             }
         }
         return false
+    }
+
+    private func isPackagedVersion(_ version: String) -> Bool {
+        versionParts(version).count >= 4
     }
 
     private func versionParts(_ version: String) -> [Int] {
