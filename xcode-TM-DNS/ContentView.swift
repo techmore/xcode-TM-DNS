@@ -150,14 +150,14 @@ struct SetupView: View {
     }
 
     private var lanDigCommand: String {
-        "dig @192.168.222.8 example.com"
+        "dig @<detected-lan-ip> example.com"
     }
 
     private var liveCommand: String {
         """
         cd /Users/techmore/projects/TM-DNS
-        sudo TMDNS_DNS_ADDR=192.168.222.8:53 \\
-          TMDNS_HTTP_ADDR=127.0.0.1:8080 \\
+        sudo TMDNS_DNS_ADDR=auto:53 \\
+          TMDNS_HTTP_ADDR=auto:8080 \\
           TMDNS_DB_PATH=/Users/techmore/projects/TM-DNS/tm-dns-dev.db \\
           TMDNS_LOG_LEVEL=debug \\
           ./tmdns
@@ -185,7 +185,7 @@ struct SetupView: View {
                     SetupStepCard(
                         number: "1",
                         title: "Start TM-DNS",
-                        detail: "Run the resolver on the Mac that will serve DNS. For live LAN testing, bind DNS to the Mac's LAN IP and keep the admin API on localhost.",
+                        detail: "Run the resolver on the Mac that will serve DNS. Auto bind chooses the active LAN IPv4 and prefers wired Ethernet over Wi-Fi.",
                         command: liveCommand
                     )
 
