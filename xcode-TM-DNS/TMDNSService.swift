@@ -89,9 +89,9 @@ final class TMDNSService: ObservableObject {
             guard let packageAsset = release.packageAsset else {
                 throw UpdateError.noPackageAsset
             }
-            guard let currentVersion = installedVersionForUpdate else {
+            guard let currentVersion = await currentInstalledVersion() else {
                 availableUpdate = nil
-                updateStatus = userInitiated ? .failed("Service version unavailable") : .idle
+                updateStatus = userInitiated ? .failed("Installed version unavailable") : .idle
                 return
             }
             if isRelease(release.version, newerThan: currentVersion) {
@@ -313,6 +313,50 @@ final class TMDNSService: ObservableObject {
         versionParts(version).count >= 4
     }
 
+    private func currentInstalledVersion() async -> String? {
+        if let version = installedVersionForUpdate {
+            return version
+        }
+        if let version = await healthVersion() {
+            return version
+        }
+        return await packageReceiptVersion()
+    }
+
+    private func healthVersion() async -> String? {
+        do {
+            let (data, response) = try await data(path: "/api/health")
+            guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+                return nil
+            }
+            let health = try JSONDecoder.tmdns.decode(HealthResponse.self, from: data)
+            guard let version = health.version?.version, isPackagedVersion(version) else {
+                return nil
+            }
+            return version
+        } catch {
+            return nil
+        }
+    }
+
+    private func packageReceiptVersion() async -> String? {
+        do {
+            let output = try await runForOutput("/usr/sbin/pkgutil", arguments: ["--pkg-info", "com.techmore.tmdns"])
+            for line in output.split(separator: "\n") {
+                let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+                if trimmed.hasPrefix("version:") {
+                    let version = trimmed
+                        .replacingOccurrences(of: "version:", with: "")
+                        .trimmingCharacters(in: .whitespacesAndNewlines)
+                    return isPackagedVersion(version) ? version : nil
+                }
+            }
+        } catch {
+            return nil
+        }
+        return nil
+    }
+
     private func versionParts(_ version: String) -> [Int] {
         version
             .trimmingPrefix("v")
@@ -340,6 +384,31 @@ final class TMDNSService: ObservableObject {
                     continuation.resume()
                 } else {
                     continuation.resume(throwing: UpdateError.verificationFailed)
+                }
+            }
+            do {
+                try process.run()
+            } catch {
+                continuation.resume(throwing: error)
+            }
+        }
+    }
+
+    private func runForOutput(_ launchPath: String, arguments: [String]) async throws -> String {
+        try await withCheckedThrowingContinuation { continuation in
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: launchPath)
+            process.arguments = arguments
+            let pipe = Pipe()
+            process.standardOutput = pipe
+            process.standardError = pipe
+            process.terminationHandler = { process in
+                let data = pipe.fileHandleForReading.readDataToEndOfFile()
+                let output = String(data: data, encoding: .utf8) ?? ""
+                if process.terminationStatus == 0 {
+                    continuation.resume(returning: output)
+                } else {
+                    continuation.resume(throwing: UpdateError.commandFailed)
                 }
             }
             do {
@@ -498,6 +567,7 @@ struct GitHubReleaseAsset: Decodable {
 enum UpdateError: Error {
     case noPackageAsset
     case verificationFailed
+    case commandFailed
 }
 
 private extension String {

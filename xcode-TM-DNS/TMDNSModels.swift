@@ -19,6 +19,10 @@ struct VersionInfo: Decodable {
     }
 }
 
+struct HealthResponse: Decodable {
+    let version: VersionInfo?
+}
+
 struct DashboardSummary: Decodable {
     let queriesToday: Int
     let blockedToday: Int
