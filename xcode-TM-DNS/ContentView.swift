@@ -25,10 +25,16 @@ struct ContentView: View {
     var body: some View {
         NavigationSplitView {
             List(AppSection.allCases, selection: $selection) { section in
-                Label(section.title, systemImage: section.systemImage)
-                    .foregroundStyle(TMDNSTheme.stone900)
-                    .listRowBackground(selection == section ? TMDNSTheme.olive300 : TMDNSTheme.olive200)
-                    .tag(section)
+                HStack(spacing: 8) {
+                    Image(systemName: section.systemImage)
+                        .symbolRenderingMode(.monochrome)
+                        .foregroundStyle(TMDNSTheme.stone900)
+                        .frame(width: 18)
+                    Text(section.title)
+                        .foregroundStyle(TMDNSTheme.stone900)
+                }
+                .listRowBackground(selection == section ? TMDNSTheme.olive300 : TMDNSTheme.olive200)
+                .tag(section)
             }
             .foregroundStyle(TMDNSTheme.stone900)
             .scrollContentBackground(.hidden)
