@@ -102,7 +102,7 @@ enum AppSection: String, CaseIterable, Identifiable {
         case .activity: "Realtime"
         case .hosts: "Hosts"
         case .domains: "Top Domains"
-        case .lists: "Lists"
+        case .lists: "Block Lists"
         case .audit: "Audit"
         case .web: "Web Dashboard"
         case .settings: "Settings"
@@ -626,16 +626,16 @@ struct ListsView: View {
             VStack(alignment: .leading, spacing: 16) {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {
-                        Text("Lists")
+                        Text("Block Lists")
                             .font(.system(size: 34, weight: .semibold, design: .serif))
                         Spacer()
-                        Button("Refresh Enabled Lists") {
+                        Button("Refresh Enabled Block Lists") {
                             Task { await service.refreshEnabledBlocklists() }
                         }
                         .buttonStyle(.borderedProminent)
                         .tint(TMDNSTheme.olive700)
                     }
-                    Text("Enable curated blocklist sources or add a raw GitHub/custom URL. Refresh compiles enabled lists into local DNS enforcement entries.")
+                    Text("Enable curated block lists or add a raw GitHub/custom URL. Refresh compiles enabled sources into local DNS enforcement entries.")
                         .foregroundStyle(TMDNSTheme.stone500)
                 }
                 .padding(20)
@@ -671,7 +671,7 @@ struct ListsView: View {
                 .overlay(RoundedRectangle(cornerRadius: 8).stroke(TMDNSTheme.olive400, lineWidth: 1))
 
                 HStack(alignment: .top, spacing: 16) {
-                    ListPanel(title: "Curated Presets") {
+                    ListPanel(title: "Curated Block Lists") {
                         ForEach(service.blocklistPresets) { preset in
                             PresetRow(preset: preset)
                         }
@@ -752,11 +752,13 @@ struct PresetRow: View {
                         .foregroundStyle(TMDNSTheme.olive700)
                 }
                 Spacer()
-                Toggle("", isOn: Binding(
+                Toggle(preset.enabled ? "Enabled" : "Disabled", isOn: Binding(
                     get: { preset.enabled },
                     set: { enabled in Task { await service.setPreset(preset, enabled: enabled) } }
                 ))
-                .labelsHidden()
+                .toggleStyle(.switch)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(TMDNSTheme.stone900)
             }
             Text(preset.description)
                 .font(.caption)
@@ -787,11 +789,13 @@ struct SourceRow: View {
                         .foregroundStyle(TMDNSTheme.olive700)
                 }
                 Spacer()
-                Toggle("", isOn: Binding(
+                Toggle(source.enabled ? "Enabled" : "Disabled", isOn: Binding(
                     get: { source.enabled },
                     set: { enabled in Task { await service.setSource(source, enabled: enabled) } }
                 ))
-                .labelsHidden()
+                .toggleStyle(.switch)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(TMDNSTheme.stone900)
             }
             Text(source.url)
                 .font(.caption.monospaced())
