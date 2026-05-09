@@ -112,6 +112,50 @@ struct RuleCreateRequest: Encodable {
     let note: String
 }
 
+struct BlocklistPreset: Decodable, Identifiable {
+    let id: String
+    let name: String
+    let tier: String
+    let description: String
+    let homeURL: String
+    let sourceURL: String
+    let enabled: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case name
+        case tier
+        case description
+        case homeURL = "home_url"
+        case sourceURL = "source_url"
+        case enabled
+    }
+}
+
+struct BlocklistSource: Decodable, Identifiable {
+    let id: Int
+    let name: String
+    let url: String
+    let format: String
+    let enabled: Bool
+    let lastStatus: String
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case name
+        case url
+        case format
+        case enabled
+        case lastStatus = "last_status"
+    }
+}
+
+struct BlocklistSourceCreateRequest: Encodable {
+    let name: String
+    let url: String
+    let format: String
+}
+
 extension JSONDecoder {
     static var tmdns: JSONDecoder {
         let decoder = JSONDecoder()

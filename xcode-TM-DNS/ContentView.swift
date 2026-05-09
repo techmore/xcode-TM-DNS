@@ -48,6 +48,8 @@ struct ContentView: View {
                     HostsView()
                 case .domains:
                     DomainsView()
+                case .lists:
+                    ListsView()
                 case .web:
                     WebDashboardView(url: service.baseURL)
                 case .settings:
@@ -81,6 +83,7 @@ enum AppSection: String, CaseIterable, Identifiable {
     case activity
     case hosts
     case domains
+    case lists
     case web
     case settings
 
@@ -93,6 +96,7 @@ enum AppSection: String, CaseIterable, Identifiable {
         case .activity: "Realtime"
         case .hosts: "Hosts"
         case .domains: "Top Domains"
+        case .lists: "Lists"
         case .web: "Web Dashboard"
         case .settings: "Settings"
         }
@@ -105,6 +109,7 @@ enum AppSection: String, CaseIterable, Identifiable {
         case .activity: "waveform.path.ecg"
         case .hosts: "desktopcomputer"
         case .domains: "network"
+        case .lists: "list.bullet.rectangle"
         case .web: "globe"
         case .settings: "gearshape"
         }
@@ -549,6 +554,164 @@ struct TopDomainsList: View {
                 Divider().overlay(TMDNSTheme.olive400.opacity(0.55))
             }
         }
+    }
+}
+
+struct ListsView: View {
+    @EnvironmentObject private var service: TMDNSService
+    @State private var sourceName = ""
+    @State private var sourceURL = ""
+    @State private var sourceFormat = "domains"
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Lists")
+                        .font(.system(size: 34, weight: .semibold, design: .serif))
+                    Text("Enable curated blocklist sources or add a raw GitHub/custom URL. These are persisted now; fetch, compile, and enforcement wiring is the next daemon phase.")
+                        .foregroundStyle(TMDNSTheme.olive300)
+                }
+                .padding(20)
+                .foregroundStyle(TMDNSTheme.olive50)
+                .background(TMDNSTheme.olive950, in: RoundedRectangle(cornerRadius: 8))
+
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Add Custom Source")
+                        .font(.system(size: 24, weight: .semibold, design: .serif))
+                    HStack {
+                        TextField("Name", text: $sourceName)
+                        TextField("https://raw.githubusercontent.com/org/repo/main/domains.txt", text: $sourceURL)
+                        Picker("Format", selection: $sourceFormat) {
+                            Text("Domains").tag("domains")
+                            Text("Hosts").tag("hosts")
+                            Text("AdGuard").tag("adguard")
+                        }
+                        .frame(width: 130)
+                        Button("Add") {
+                            Task {
+                                await service.addSource(name: sourceName, url: sourceURL, format: sourceFormat)
+                                sourceName = ""
+                                sourceURL = ""
+                            }
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(TMDNSTheme.olive700)
+                    }
+                }
+                .padding(14)
+                .background(TMDNSTheme.olive200, in: RoundedRectangle(cornerRadius: 8))
+                .overlay(RoundedRectangle(cornerRadius: 8).stroke(TMDNSTheme.olive400, lineWidth: 1))
+
+                HStack(alignment: .top, spacing: 16) {
+                    ListPanel(title: "Curated Presets") {
+                        ForEach(service.blocklistPresets) { preset in
+                            PresetRow(preset: preset)
+                        }
+                    }
+                    ListPanel(title: "Custom Sources") {
+                        if service.blocklistSources.isEmpty {
+                            Text("No custom sources yet.")
+                                .foregroundStyle(TMDNSTheme.stone500)
+                        }
+                        ForEach(service.blocklistSources) { source in
+                            SourceRow(source: source)
+                        }
+                    }
+                }
+            }
+            .padding(20)
+        }
+        .background(TMDNSTheme.olive300)
+        .task {
+            await service.refreshBlocklists()
+        }
+    }
+}
+
+struct ListPanel<Content: View>: View {
+    let title: String
+    @ViewBuilder var content: Content
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(title)
+                .font(.system(size: 24, weight: .semibold, design: .serif))
+            content
+        }
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .padding(14)
+        .background(TMDNSTheme.olive200, in: RoundedRectangle(cornerRadius: 8))
+        .overlay(RoundedRectangle(cornerRadius: 8).stroke(TMDNSTheme.olive400, lineWidth: 1))
+    }
+}
+
+struct PresetRow: View {
+    @EnvironmentObject private var service: TMDNSService
+    let preset: BlocklistPreset
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(preset.name)
+                        .font(.headline)
+                    Text(preset.tier)
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(TMDNSTheme.olive700)
+                }
+                Spacer()
+                Toggle("", isOn: Binding(
+                    get: { preset.enabled },
+                    set: { enabled in Task { await service.setPreset(preset, enabled: enabled) } }
+                ))
+                .labelsHidden()
+            }
+            Text(preset.description)
+                .font(.caption)
+                .foregroundStyle(TMDNSTheme.stone500)
+            HStack {
+                Link("Review", destination: URL(string: preset.homeURL)!)
+                Link("Source", destination: URL(string: preset.sourceURL)!)
+            }
+            .font(.caption.weight(.semibold))
+        }
+        .padding(10)
+        .background(TMDNSTheme.olive100, in: RoundedRectangle(cornerRadius: 7))
+    }
+}
+
+struct SourceRow: View {
+    @EnvironmentObject private var service: TMDNSService
+    let source: BlocklistSource
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(source.name)
+                        .font(.headline)
+                    Text(source.format.uppercased())
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(TMDNSTheme.olive700)
+                }
+                Spacer()
+                Toggle("", isOn: Binding(
+                    get: { source.enabled },
+                    set: { enabled in Task { await service.setSource(source, enabled: enabled) } }
+                ))
+                .labelsHidden()
+            }
+            Text(source.url)
+                .font(.caption.monospaced())
+                .foregroundStyle(TMDNSTheme.stone500)
+                .textSelection(.enabled)
+            Text(source.lastStatus)
+                .font(.caption)
+                .foregroundStyle(TMDNSTheme.stone500)
+        }
+        .padding(10)
+        .background(TMDNSTheme.olive100, in: RoundedRectangle(cornerRadius: 7))
     }
 }
 

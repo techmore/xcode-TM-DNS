@@ -5,6 +5,8 @@ import Foundation
 @MainActor
 final class TMDNSService: ObservableObject {
     @Published private(set) var dashboard: DashboardResponse?
+    @Published private(set) var blocklistPresets: [BlocklistPreset] = []
+    @Published private(set) var blocklistSources: [BlocklistSource] = []
     @Published private(set) var lastUpdated: Date?
     @Published private(set) var errorMessage: String?
     @Published var baseURLString = "http://127.0.0.1:8080"
@@ -47,10 +49,64 @@ final class TMDNSService: ObservableObject {
                 throw URLError(.badServerResponse)
             }
             dashboard = try JSONDecoder.tmdns.decode(DashboardResponse.self, from: data)
+            await refreshBlocklists()
             lastUpdated = Date()
             errorMessage = nil
         } catch {
             errorMessage = "Service offline"
+        }
+    }
+
+    func refreshBlocklists() async {
+        do {
+            async let presetsData = URLSession.shared.data(from: baseURL.appending(path: "/api/blocklist-presets"))
+            async let sourcesData = URLSession.shared.data(from: baseURL.appending(path: "/api/blocklist-sources"))
+            let (presetResult, sourceResult) = try await (presetsData, sourcesData)
+            blocklistPresets = try JSONDecoder.tmdns.decode([BlocklistPreset].self, from: presetResult.0)
+            blocklistSources = try JSONDecoder.tmdns.decode([BlocklistSource].self, from: sourceResult.0)
+        } catch {
+            // Keep dashboard health independent from list metadata.
+        }
+    }
+
+    func setPreset(_ preset: BlocklistPreset, enabled: Bool) async {
+        await patchEnabled(path: "/api/blocklist-presets/\(preset.id)", enabled: enabled)
+        await refreshBlocklists()
+    }
+
+    func setSource(_ source: BlocklistSource, enabled: Bool) async {
+        await patchEnabled(path: "/api/blocklist-sources/\(source.id)", enabled: enabled)
+        await refreshBlocklists()
+    }
+
+    func addSource(name: String, url: String, format: String) async {
+        do {
+            var request = URLRequest(url: baseURL.appending(path: "/api/blocklist-sources"))
+            request.httpMethod = "POST"
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.httpBody = try JSONEncoder().encode(BlocklistSourceCreateRequest(name: name, url: url, format: format))
+            let (_, response) = try await URLSession.shared.data(for: request)
+            guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+                throw URLError(.badServerResponse)
+            }
+            await refreshBlocklists()
+        } catch {
+            errorMessage = "List source failed"
+        }
+    }
+
+    private func patchEnabled(path: String, enabled: Bool) async {
+        do {
+            var request = URLRequest(url: baseURL.appending(path: path))
+            request.httpMethod = "PATCH"
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.httpBody = try JSONEncoder().encode(["enabled": enabled])
+            let (_, response) = try await URLSession.shared.data(for: request)
+            guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+                throw URLError(.badServerResponse)
+            }
+        } catch {
+            errorMessage = "List update failed"
         }
     }
 
