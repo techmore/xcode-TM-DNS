@@ -170,6 +170,19 @@ struct HostDetail: Decodable {
         case topDomains = "top_domains"
         case topActions = "top_actions"
     }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        host = try container.decode(Host.self, forKey: .host)
+        windowHours = try container.decodeIfPresent(Int.self, forKey: .windowHours) ?? 24
+        recent = try container.decodeIfPresent([QueryEvent].self, forKey: .recent) ?? []
+        blocked = try container.decodeIfPresent([QueryEvent].self, forKey: .blocked) ?? []
+        topDomains = try container.decodeIfPresent([TopRow].self, forKey: .topDomains) ?? []
+        topActions = try container.decodeIfPresent([TopRow].self, forKey: .topActions) ?? []
+        totalQueries = try container.decodeIfPresent(Int.self, forKey: .totalQueries) ?? recent.count
+        totalBlocked = try container.decodeIfPresent(Int.self, forKey: .totalBlocked) ?? blocked.count
+        uniqueDomains = try container.decodeIfPresent(Int.self, forKey: .uniqueDomains) ?? Set(topDomains.map(\.key)).count
+    }
 }
 
 struct RuleCreateRequest: Encodable {
