@@ -26,8 +26,11 @@ struct ContentView: View {
         NavigationSplitView {
             List(AppSection.allCases, selection: $selection) { section in
                 Label(section.title, systemImage: section.systemImage)
+                    .foregroundStyle(TMDNSTheme.stone900)
+                    .listRowBackground(selection == section ? TMDNSTheme.olive300 : TMDNSTheme.olive200)
                     .tag(section)
             }
+            .foregroundStyle(TMDNSTheme.stone900)
             .scrollContentBackground(.hidden)
             .background(TMDNSTheme.olive200)
             .navigationTitle("TM-DNS")
