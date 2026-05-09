@@ -18,6 +18,7 @@ final class TMDNSService: ObservableObject {
     @Published private(set) var updateStatus = UpdateStatus.idle
     @Published private(set) var availableUpdate: GitHubRelease?
     @Published private(set) var detectedLANIP: String?
+    @Published private(set) var installedVersionText = "Version unknown"
 
     private var pollingTask: Task<Void, Never>?
     private var updateCheckTask: Task<Void, Never>?
@@ -61,6 +62,7 @@ final class TMDNSService: ObservableObject {
                 throw URLError(.badServerResponse)
             }
             dashboard = try JSONDecoder.tmdns.decode(DashboardResponse.self, from: data)
+            refreshInstalledVersionText()
             await refreshBlocklists()
             await refreshAudit()
             lastUpdated = Date()
@@ -92,8 +94,10 @@ final class TMDNSService: ObservableObject {
             guard let currentVersion = await currentInstalledVersion() else {
                 availableUpdate = nil
                 updateStatus = userInitiated ? .failed("Installed version unavailable") : .idle
+                refreshInstalledVersionText()
                 return
             }
+            installedVersionText = "Version \(currentVersion)"
             if isRelease(release.version, newerThan: currentVersion) {
                 availableUpdate = release.withPackageAsset(packageAsset)
                 updateStatus = .available(release.version)
@@ -321,6 +325,12 @@ final class TMDNSService: ObservableObject {
             return version
         }
         return await packageReceiptVersion()
+    }
+
+    func refreshInstalledVersionText() {
+        if let version = installedVersionForUpdate {
+            installedVersionText = "Version \(version)"
+        }
     }
 
     private func healthVersion() async -> String? {

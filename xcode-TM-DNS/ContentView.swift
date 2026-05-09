@@ -374,9 +374,14 @@ struct HeaderCard: View {
                         .font(.system(size: 34, weight: .semibold, design: .serif))
                 }
                 Spacer()
-                Text(service.statusText)
-                    .font(.callout.weight(.medium))
-                    .foregroundStyle(service.isHealthy ? TMDNSTheme.olive700 : TMDNSTheme.red)
+                VStack(alignment: .trailing, spacing: 4) {
+                    Text(service.statusText)
+                        .font(.callout.weight(.medium))
+                        .foregroundStyle(service.isHealthy ? TMDNSTheme.olive700 : TMDNSTheme.red)
+                    Text(service.installedVersionText)
+                        .font(.caption.monospacedDigit().weight(.semibold))
+                        .foregroundStyle(TMDNSTheme.stone500)
+                }
             }
             Text("Native control shell for the local TM-DNS resolver, policy dashboard, and school network visibility.")
                 .foregroundStyle(TMDNSTheme.stone500)
@@ -980,6 +985,9 @@ struct MenuBarView: View {
                 .font(.headline)
             Text(service.statusText)
                 .font(.caption)
+                .foregroundStyle(TMDNSTheme.stone500)
+            Text(service.installedVersionText)
+                .font(.caption.monospacedDigit())
                 .foregroundStyle(TMDNSTheme.stone500)
             Divider()
             Button("Open Dashboard") {
