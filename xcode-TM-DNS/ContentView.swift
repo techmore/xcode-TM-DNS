@@ -50,6 +50,8 @@ struct ContentView: View {
                     DomainsView()
                 case .lists:
                     ListsView()
+                case .audit:
+                    AuditView()
                 case .web:
                     WebDashboardView(url: service.baseURL)
                 case .settings:
@@ -84,6 +86,7 @@ enum AppSection: String, CaseIterable, Identifiable {
     case hosts
     case domains
     case lists
+    case audit
     case web
     case settings
 
@@ -97,6 +100,7 @@ enum AppSection: String, CaseIterable, Identifiable {
         case .hosts: "Hosts"
         case .domains: "Top Domains"
         case .lists: "Lists"
+        case .audit: "Audit"
         case .web: "Web Dashboard"
         case .settings: "Settings"
         }
@@ -110,6 +114,7 @@ enum AppSection: String, CaseIterable, Identifiable {
         case .hosts: "desktopcomputer"
         case .domains: "network"
         case .lists: "list.bullet.rectangle"
+        case .audit: "checklist.checked"
         case .web: "globe"
         case .settings: "gearshape"
         }
@@ -557,6 +562,54 @@ struct TopDomainsList: View {
     }
 }
 
+struct AuditView: View {
+    @EnvironmentObject private var service: TMDNSService
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                Text("Audit")
+                    .font(.system(size: 34, weight: .semibold, design: .serif))
+
+                ListPanel(title: "Policy and Admin Changes") {
+                    if service.auditEvents.isEmpty {
+                        Text("No audit events recorded yet.")
+                            .foregroundStyle(TMDNSTheme.stone500)
+                    }
+                    ForEach(service.auditEvents) { event in
+                        HStack(alignment: .top, spacing: 12) {
+                            Text(event.timestamp)
+                                .font(.caption.monospaced())
+                                .foregroundStyle(TMDNSTheme.stone500)
+                                .frame(width: 220, alignment: .leading)
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(event.action)
+                                    .font(.headline.monospaced())
+                                Text(event.target)
+                                    .font(.callout.monospaced())
+                                    .foregroundStyle(TMDNSTheme.stone900)
+                                if !event.detail.isEmpty {
+                                    Text(event.detail)
+                                        .font(.caption)
+                                        .foregroundStyle(TMDNSTheme.stone500)
+                                }
+                            }
+                            Spacer()
+                        }
+                        .padding(10)
+                        .background(TMDNSTheme.olive100, in: RoundedRectangle(cornerRadius: 7))
+                    }
+                }
+            }
+            .padding(20)
+        }
+        .background(TMDNSTheme.olive300)
+        .task {
+            await service.refreshAudit()
+        }
+    }
+}
+
 struct ListsView: View {
     @EnvironmentObject private var service: TMDNSService
     @State private var sourceName = ""
@@ -567,9 +620,17 @@ struct ListsView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("Lists")
-                        .font(.system(size: 34, weight: .semibold, design: .serif))
-                    Text("Enable curated blocklist sources or add a raw GitHub/custom URL. These are persisted now; fetch, compile, and enforcement wiring is the next daemon phase.")
+                    HStack {
+                        Text("Lists")
+                            .font(.system(size: 34, weight: .semibold, design: .serif))
+                        Spacer()
+                        Button("Refresh Enabled Lists") {
+                            Task { await service.refreshEnabledBlocklists() }
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(TMDNSTheme.olive700)
+                    }
+                    Text("Enable curated blocklist sources or add a raw GitHub/custom URL. Refresh compiles enabled lists into local DNS enforcement entries.")
                         .foregroundStyle(TMDNSTheme.olive300)
                 }
                 .padding(20)
@@ -616,6 +677,30 @@ struct ListsView: View {
                         }
                         ForEach(service.blocklistSources) { source in
                             SourceRow(source: source)
+                        }
+                    }
+                }
+
+                if !service.lastBlocklistRefresh.isEmpty {
+                    ListPanel(title: "Last Refresh") {
+                        ForEach(service.lastBlocklistRefresh) { result in
+                            HStack {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(result.sourceName)
+                                        .font(.headline)
+                                    Text(result.error ?? result.url)
+                                        .font(.caption)
+                                        .foregroundStyle(TMDNSTheme.stone500)
+                                }
+                                Spacer()
+                                Text(result.status)
+                                    .font(.caption.weight(.bold))
+                                    .foregroundStyle(result.status == "ok" ? TMDNSTheme.green : TMDNSTheme.red)
+                                Text("\(result.entries)")
+                                    .monospacedDigit()
+                            }
+                            .padding(10)
+                            .background(TMDNSTheme.olive100, in: RoundedRectangle(cornerRadius: 7))
                         }
                     }
                 }

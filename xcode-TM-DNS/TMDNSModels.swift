@@ -156,6 +156,31 @@ struct BlocklistSourceCreateRequest: Encodable {
     let format: String
 }
 
+struct BlocklistRefreshResult: Decodable, Identifiable {
+    var id: String { "\(sourceName)-\(url)" }
+    let sourceName: String
+    let url: String
+    let status: String
+    let entries: Int
+    let error: String?
+
+    enum CodingKeys: String, CodingKey {
+        case sourceName = "source_name"
+        case url
+        case status
+        case entries
+        case error
+    }
+}
+
+struct AuditEvent: Decodable, Identifiable {
+    let id: Int
+    let timestamp: String
+    let action: String
+    let target: String
+    let detail: String
+}
+
 extension JSONDecoder {
     static var tmdns: JSONDecoder {
         let decoder = JSONDecoder()

@@ -7,6 +7,8 @@ final class TMDNSService: ObservableObject {
     @Published private(set) var dashboard: DashboardResponse?
     @Published private(set) var blocklistPresets: [BlocklistPreset] = []
     @Published private(set) var blocklistSources: [BlocklistSource] = []
+    @Published private(set) var lastBlocklistRefresh: [BlocklistRefreshResult] = []
+    @Published private(set) var auditEvents: [AuditEvent] = []
     @Published private(set) var lastUpdated: Date?
     @Published private(set) var errorMessage: String?
     @Published var baseURLString = "http://127.0.0.1:8080"
@@ -50,6 +52,7 @@ final class TMDNSService: ObservableObject {
             }
             dashboard = try JSONDecoder.tmdns.decode(DashboardResponse.self, from: data)
             await refreshBlocklists()
+            await refreshAudit()
             lastUpdated = Date()
             errorMessage = nil
         } catch {
@@ -92,6 +95,33 @@ final class TMDNSService: ObservableObject {
             await refreshBlocklists()
         } catch {
             errorMessage = "List source failed"
+        }
+    }
+
+    func refreshEnabledBlocklists() async {
+        do {
+            var request = URLRequest(url: baseURL.appending(path: "/api/blocklists/refresh"))
+            request.httpMethod = "POST"
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+                throw URLError(.badServerResponse)
+            }
+            lastBlocklistRefresh = try JSONDecoder.tmdns.decode([BlocklistRefreshResult].self, from: data)
+            await refreshBlocklists()
+        } catch {
+            errorMessage = "List refresh failed"
+        }
+    }
+
+    func refreshAudit() async {
+        do {
+            let (data, response) = try await URLSession.shared.data(from: baseURL.appending(path: "/api/audit"))
+            guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+                throw URLError(.badServerResponse)
+            }
+            auditEvents = try JSONDecoder.tmdns.decode([AuditEvent].self, from: data)
+        } catch {
+            // Audit visibility should not mark DNS service unhealthy.
         }
     }
 
