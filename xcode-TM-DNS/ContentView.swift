@@ -164,12 +164,11 @@ struct SetupView: View {
 
     private var liveCommand: String {
         """
-        cd /Users/techmore/projects/TM-DNS
         sudo TMDNS_DNS_ADDR=auto:53 \\
           TMDNS_HTTP_ADDR=auto:8080 \\
-          TMDNS_DB_PATH=/Users/techmore/projects/TM-DNS/tm-dns-dev.db \\
-          TMDNS_LOG_LEVEL=debug \\
-          ./tmdns
+          TMDNS_DB_PATH="/Library/Application Support/TM-DNS/tm-dns.db" \\
+          TMDNS_LOG_LEVEL=info \\
+          "/Library/Application Support/TM-DNS/tmdns"
         """
     }
 
