@@ -24,7 +24,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
-		A0EE1F842FAFCE3A000FD446 /* xcode-TM-DNS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "xcode-TM-DNS.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		A0EE1F842FAFCE3A000FD446 /* TM-DNS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "TM-DNS.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		A0EE1F932FAFCE3C000FD446 /* xcode-TM-DNSTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "xcode-TM-DNSTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		A0EE1F9D2FAFCE3C000FD446 /* xcode-TM-DNSUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "xcode-TM-DNSUITests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -85,7 +85,7 @@
 		A0EE1F852FAFCE3A000FD446 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				A0EE1F842FAFCE3A000FD446 /* xcode-TM-DNS.app */,
+				A0EE1F842FAFCE3A000FD446 /* TM-DNS.app */,
 				A0EE1F932FAFCE3C000FD446 /* xcode-TM-DNSTests.xctest */,
 				A0EE1F9D2FAFCE3C000FD446 /* xcode-TM-DNSUITests.xctest */,
 			);
@@ -114,7 +114,7 @@
 			packageProductDependencies = (
 			);
 			productName = "xcode-TM-DNS";
-			productReference = A0EE1F842FAFCE3A000FD446 /* xcode-TM-DNS.app */;
+			productReference = A0EE1F842FAFCE3A000FD446 /* TM-DNS.app */;
 			productType = "com.apple.product-type.application";
 		};
 		A0EE1F922FAFCE3C000FD446 /* xcode-TM-DNSTests */ = {
@@ -394,6 +394,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = "xcode-TM-DNS/xcode-TM-DNS.entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
@@ -409,8 +410,8 @@
 					"@executable_path/../Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "com.techmore.org.xcode-TM-DNS";
-				PRODUCT_NAME = "$(TARGET_NAME)";
+				PRODUCT_BUNDLE_IDENTIFIER = com.techmore.tmdns;
+				PRODUCT_NAME = "TM-DNS";
 				REGISTER_APP_GROUPS = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -426,6 +427,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = "xcode-TM-DNS/xcode-TM-DNS.entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
@@ -441,8 +443,8 @@
 					"@executable_path/../Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "com.techmore.org.xcode-TM-DNS";
-				PRODUCT_NAME = "$(TARGET_NAME)";
+				PRODUCT_BUNDLE_IDENTIFIER = com.techmore.tmdns;
+				PRODUCT_NAME = "TM-DNS";
 				REGISTER_APP_GROUPS = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -470,7 +472,7 @@
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/xcode-TM-DNS.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/xcode-TM-DNS";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/TM-DNS.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/TM-DNS";
 			};
 			name = Debug;
 		};
@@ -491,7 +493,7 @@
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/xcode-TM-DNS.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/xcode-TM-DNS";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/TM-DNS.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/TM-DNS";
 			};
 			name = Release;
 		};
