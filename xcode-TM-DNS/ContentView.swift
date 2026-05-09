@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import WebKit
 
@@ -37,6 +38,8 @@ struct ContentView: View {
         } detail: {
             Group {
                 switch selection {
+                case .setup:
+                    SetupView()
                 case .overview:
                     OverviewView()
                 case .activity:
@@ -73,6 +76,7 @@ struct ContentView: View {
 }
 
 enum AppSection: String, CaseIterable, Identifiable {
+    case setup
     case overview
     case activity
     case hosts
@@ -84,6 +88,7 @@ enum AppSection: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
+        case .setup: "Setup"
         case .overview: "Overview"
         case .activity: "Realtime"
         case .hosts: "Hosts"
@@ -95,6 +100,7 @@ enum AppSection: String, CaseIterable, Identifiable {
 
     var systemImage: String {
         switch self {
+        case .setup: "checklist"
         case .overview: "gauge.with.dots.needle.67percent"
         case .activity: "waveform.path.ecg"
         case .hosts: "desktopcomputer"
@@ -123,6 +129,186 @@ struct StatusFooter: View {
                 .lineLimit(2)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+struct SetupView: View {
+    @EnvironmentObject private var service: TMDNSService
+
+    private var digCommand: String {
+        "dig @127.0.0.1 -p 53 example.com"
+    }
+
+    private var lanDigCommand: String {
+        "dig @192.168.222.8 example.com"
+    }
+
+    private var liveCommand: String {
+        """
+        cd /Users/techmore/projects/TM-DNS
+        sudo TMDNS_DNS_ADDR=192.168.222.8:53 \\
+          TMDNS_HTTP_ADDR=127.0.0.1:8080 \\
+          TMDNS_DB_PATH=/Users/techmore/projects/TM-DNS/tm-dns-dev.db \\
+          TMDNS_LOG_LEVEL=debug \\
+          ./tmdns
+        """
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Text("Setup")
+                            .font(.system(size: 34, weight: .semibold, design: .serif))
+                        Spacer()
+                        StatusPill(isHealthy: service.isHealthy, text: service.isHealthy ? "API connected" : "API offline")
+                    }
+                    Text("Use this checklist when turning TM-DNS into the active resolver for a network. Verify the local service first, then move clients or the router to the Mac's DNS address.")
+                        .foregroundStyle(TMDNSTheme.olive300)
+                }
+                .padding(20)
+                .foregroundStyle(TMDNSTheme.olive50)
+                .background(TMDNSTheme.olive950, in: RoundedRectangle(cornerRadius: 8))
+
+                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+                    SetupStepCard(
+                        number: "1",
+                        title: "Start TM-DNS",
+                        detail: "Run the resolver on the Mac that will serve DNS. For live LAN testing, bind DNS to the Mac's LAN IP and keep the admin API on localhost.",
+                        command: liveCommand
+                    )
+
+                    SetupStepCard(
+                        number: "2",
+                        title: "Verify the app API",
+                        detail: service.isHealthy ? "The native app can reach the local TM-DNS admin API." : "The native app cannot reach the admin API yet. Start TM-DNS, then refresh.",
+                        command: "curl http://127.0.0.1:8080/api/dashboard"
+                    ) {
+                        Button("Refresh") {
+                            Task { await service.refresh() }
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(TMDNSTheme.olive700)
+                    }
+
+                    SetupStepCard(
+                        number: "3",
+                        title: "Test DNS locally",
+                        detail: "Before touching router settings, make sure this Mac can answer a DNS query directly.",
+                        command: digCommand
+                    )
+
+                    SetupStepCard(
+                        number: "4",
+                        title: "Test LAN DNS address",
+                        detail: "From the Mac or another machine on the same network, query the Mac's LAN DNS address directly.",
+                        command: lanDigCommand
+                    )
+
+                    SetupStepCard(
+                        number: "5",
+                        title: "Point clients at TM-DNS",
+                        detail: "In UniFi, keep DHCP Mode set to DHCP Server. Set DNS Server to the Mac's static LAN IP. Do not use DHCP Relay for this.",
+                        command: "DNS Server: 192.168.222.8"
+                    )
+
+                    SetupStepCard(
+                        number: "6",
+                        title: "Watch requests",
+                        detail: "After a client renews DHCP or manually points DNS here, requests should appear in Realtime and Top Hosts.",
+                        command: "sudo tcpdump -ni any port 53"
+                    )
+                }
+            }
+            .padding(20)
+        }
+        .background(TMDNSTheme.olive300)
+    }
+}
+
+struct StatusPill: View {
+    let isHealthy: Bool
+    let text: String
+
+    var body: some View {
+        HStack(spacing: 7) {
+            Circle()
+                .fill(isHealthy ? TMDNSTheme.green : TMDNSTheme.red)
+                .frame(width: 8, height: 8)
+            Text(text.uppercased())
+                .font(.caption.weight(.bold))
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(TMDNSTheme.olive100.opacity(0.18), in: Capsule())
+    }
+}
+
+struct SetupStepCard<Action: View>: View {
+    let number: String
+    let title: String
+    let detail: String
+    let command: String
+    @ViewBuilder var action: Action
+
+    init(number: String, title: String, detail: String, command: String, @ViewBuilder action: () -> Action = { EmptyView() }) {
+        self.number = number
+        self.title = title
+        self.detail = detail
+        self.command = command
+        self.action = action()
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 10) {
+                Text(number)
+                    .font(.caption.weight(.black))
+                    .foregroundStyle(TMDNSTheme.olive50)
+                    .frame(width: 26, height: 26)
+                    .background(TMDNSTheme.olive700, in: RoundedRectangle(cornerRadius: 6))
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(title)
+                        .font(.system(size: 22, weight: .semibold, design: .serif))
+                    Text(detail)
+                        .foregroundStyle(TMDNSTheme.stone500)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
+            CommandBox(command: command)
+            action
+        }
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .padding(14)
+        .background(TMDNSTheme.olive200, in: RoundedRectangle(cornerRadius: 8))
+        .overlay(RoundedRectangle(cornerRadius: 8).stroke(TMDNSTheme.olive400, lineWidth: 1))
+    }
+}
+
+struct CommandBox: View {
+    let command: String
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Text(command)
+                .font(.system(.caption, design: .monospaced))
+                .foregroundStyle(TMDNSTheme.stone900)
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Button {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(command, forType: .string)
+            } label: {
+                Label("Copy", systemImage: "doc.on.doc")
+            }
+            .labelStyle(.iconOnly)
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+        }
+        .padding(10)
+        .background(TMDNSTheme.olive100, in: RoundedRectangle(cornerRadius: 7))
     }
 }
 
