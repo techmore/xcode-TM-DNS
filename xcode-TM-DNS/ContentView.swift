@@ -437,7 +437,7 @@ struct UpdateCard: View {
     private var iconName: String {
         switch service.updateStatus {
         case .available: "arrow.down.circle.fill"
-        case .downloading, .verifying: "clock.arrow.circlepath"
+        case .downloading, .verifying, .installing: "clock.arrow.circlepath"
         case .failed: "exclamationmark.triangle.fill"
         case .current, .readyToInstall: "checkmark.seal.fill"
         case .idle, .checking: "arrow.triangle.2.circlepath"

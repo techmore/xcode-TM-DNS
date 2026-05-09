@@ -136,8 +136,9 @@ final class TMDNSService: ObservableObject {
             updateStatus = .verifying(release.version)
             try await verifyPackage(at: destination)
 
-            updateStatus = .readyToInstall(release.version)
-            NSWorkspace.shared.open(destination)
+            updateStatus = .installing(release.version)
+            try await installPackageWithRelaunch(at: destination)
+            NSApplication.shared.terminate(nil)
         } catch {
             updateStatus = .failed("Update failed")
         }
@@ -285,7 +286,7 @@ final class TMDNSService: ObservableObject {
         switch updateStatus {
         case .idle, .checking, .available:
             return true
-        case .current, .downloading, .verifying, .readyToInstall, .failed:
+        case .current, .downloading, .verifying, .readyToInstall, .installing, .failed:
             return false
         }
     }
@@ -382,6 +383,43 @@ final class TMDNSService: ObservableObject {
     private func verifyPackage(at url: URL) async throws {
         try await run("/usr/sbin/pkgutil", arguments: ["--check-signature", url.path], requiredOutput: "Developer ID Installer")
         try await run("/usr/sbin/spctl", arguments: ["-a", "-vvv", "-t", "install", url.path], requiredOutput: "accepted")
+    }
+
+    private func installPackageWithRelaunch(at packageURL: URL) async throws {
+        let scriptURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("tm-dns-update-\(UUID().uuidString).zsh")
+        let packagePath = packageURL.path.shellQuoted
+        let scriptPath = scriptURL.path.shellQuoted
+        let script = """
+        #!/bin/zsh
+        set -u
+        log="/tmp/tm-dns-update.log"
+        {
+          echo "TM-DNS update started $(date)"
+          sleep 1
+          /usr/sbin/installer -pkg \(packagePath) -target /
+          status=$?
+          echo "installer exited ${status} $(date)"
+          if [[ ${status} -eq 0 ]]; then
+            console_user="$(stat -f '%Su' /dev/console 2>/dev/null || true)"
+            if [[ -n "${console_user}" && "${console_user}" != "root" ]]; then
+              user_uid="$(id -u "${console_user}" 2>/dev/null || true)"
+              if [[ -n "${user_uid}" ]]; then
+                /bin/launchctl asuser "${user_uid}" /usr/bin/open -a "/Applications/TM-DNS.app" || true
+              fi
+            else
+              /usr/bin/open -a "/Applications/TM-DNS.app" || true
+            fi
+          fi
+          /bin/rm -f \(scriptPath)
+          exit ${status}
+        } >> "${log}" 2>&1
+        """
+        try script.write(to: scriptURL, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: scriptURL.path)
+        let command = "/usr/bin/nohup /bin/zsh \(scriptURL.path.shellQuoted) >/tmp/tm-dns-update-launch.log 2>&1 &"
+        let appleScript = "do shell script \(command.appleScriptQuoted) with administrator privileges"
+        _ = try await runForOutput("/usr/bin/osascript", arguments: ["-e", appleScript])
     }
 
     private func run(_ launchPath: String, arguments: [String], requiredOutput: String) async throws {
@@ -522,6 +560,7 @@ enum UpdateStatus: Equatable {
     case downloading(String)
     case verifying(String)
     case readyToInstall(String)
+    case installing(String)
     case failed(String)
 
     var message: String {
@@ -533,6 +572,7 @@ enum UpdateStatus: Equatable {
         case .downloading(let version): "Downloading \(version)"
         case .verifying(let version): "Verifying \(version)"
         case .readyToInstall(let version): "Installer opened for \(version)"
+        case .installing(let version): "Installing \(version)"
         case .failed(let message): message
         }
     }
@@ -540,6 +580,16 @@ enum UpdateStatus: Equatable {
     var canInstall: Bool {
         if case .available = self { return true }
         return false
+    }
+}
+
+private extension String {
+    var shellQuoted: String {
+        "'\(replacingOccurrences(of: "'", with: "'\\''"))'"
+    }
+
+    var appleScriptQuoted: String {
+        "\"\(replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\""))\""
     }
 }
 
