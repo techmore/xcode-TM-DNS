@@ -1,6 +1,22 @@
 import SwiftUI
 import WebKit
 
+enum TMDNSTheme {
+    static let olive50 = Color(red: 0.969, green: 0.973, blue: 0.957)
+    static let olive100 = Color(red: 0.933, green: 0.941, blue: 0.902)
+    static let olive200 = Color(red: 0.867, green: 0.882, blue: 0.816)
+    static let olive300 = Color(red: 0.769, green: 0.788, blue: 0.690)
+    static let olive400 = Color(red: 0.655, green: 0.682, blue: 0.545)
+    static let olive700 = Color(red: 0.341, green: 0.365, blue: 0.239)
+    static let olive800 = Color(red: 0.275, green: 0.290, blue: 0.204)
+    static let olive950 = Color(red: 0.122, green: 0.129, blue: 0.090)
+    static let stone500 = Color(red: 0.471, green: 0.443, blue: 0.424)
+    static let stone900 = Color(red: 0.110, green: 0.098, blue: 0.090)
+    static let red = Color(red: 0.753, green: 0.224, blue: 0.169)
+    static let green = Color(red: 0.353, green: 0.541, blue: 0.369)
+    static let blue = Color(red: 0.306, green: 0.553, blue: 0.639)
+}
+
 struct ContentView: View {
     @EnvironmentObject private var service: TMDNSService
     @State private var selection: AppSection = .overview
@@ -11,6 +27,8 @@ struct ContentView: View {
                 Label(section.title, systemImage: section.systemImage)
                     .tag(section)
             }
+            .scrollContentBackground(.hidden)
+            .background(TMDNSTheme.olive200)
             .navigationTitle("TM-DNS")
             .safeAreaInset(edge: .bottom) {
                 StatusFooter()
@@ -34,6 +52,7 @@ struct ContentView: View {
                 }
             }
             .navigationTitle(selection.title)
+            .background(TMDNSTheme.olive300)
             .toolbar {
                 ToolbarItemGroup {
                     Button {
@@ -49,6 +68,7 @@ struct ContentView: View {
                 }
             }
         }
+        .tint(TMDNSTheme.olive700)
     }
 }
 
@@ -92,14 +112,14 @@ struct StatusFooter: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Circle()
-                    .fill(service.isHealthy ? Color.green : Color.red)
+                    .fill(service.isHealthy ? TMDNSTheme.green : TMDNSTheme.red)
                     .frame(width: 9, height: 9)
                 Text(service.isHealthy ? "Online" : "Offline")
                     .font(.caption.weight(.semibold))
             }
             Text(service.statusText)
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(TMDNSTheme.stone500)
                 .lineLimit(2)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -121,7 +141,7 @@ struct OverviewView: View {
             }
             .padding(20)
         }
-        .background(Color(nsColor: .windowBackgroundColor))
+        .background(TMDNSTheme.olive300)
     }
 }
 
@@ -131,18 +151,26 @@ struct HeaderCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Label("DNS Firewall", systemImage: service.isHealthy ? "shield.checkered" : "shield.slash")
-                    .font(.title.weight(.semibold))
+                HStack(spacing: 12) {
+                    Text("DNS")
+                        .font(.system(size: 14, weight: .black, design: .rounded))
+                        .foregroundStyle(TMDNSTheme.olive950)
+                        .frame(width: 42, height: 34)
+                        .background(TMDNSTheme.olive100, in: RoundedRectangle(cornerRadius: 7))
+                    Label("DNS Firewall", systemImage: service.isHealthy ? "shield.checkered" : "shield.slash")
+                        .font(.system(size: 34, weight: .semibold, design: .serif))
+                }
                 Spacer()
                 Text(service.statusText)
                     .font(.callout.weight(.medium))
-                    .foregroundStyle(service.isHealthy ? .green : .red)
+                    .foregroundStyle(service.isHealthy ? TMDNSTheme.olive300 : TMDNSTheme.red)
             }
             Text("Native control shell for the local TM-DNS resolver, policy dashboard, and school network visibility.")
-                .foregroundStyle(.secondary)
+                .foregroundStyle(TMDNSTheme.olive300)
         }
-        .padding(18)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
+        .padding(20)
+        .foregroundStyle(TMDNSTheme.olive50)
+        .background(TMDNSTheme.olive950, in: RoundedRectangle(cornerRadius: 8))
     }
 }
 
@@ -174,16 +202,18 @@ struct MetricCard: View {
         VStack(alignment: .leading, spacing: 8) {
             Text(title.uppercased())
                 .font(.caption.weight(.bold))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(TMDNSTheme.stone500)
             Text(value)
-                .font(.system(size: 30, weight: .semibold, design: .rounded))
+                .font(.system(size: 31, weight: .semibold, design: .serif))
+                .foregroundStyle(TMDNSTheme.stone900)
                 .monospacedDigit()
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(14)
-        .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
+        .background(TMDNSTheme.olive200, in: RoundedRectangle(cornerRadius: 8))
+        .overlay(RoundedRectangle(cornerRadius: 8).stroke(TMDNSTheme.olive400, lineWidth: 1))
     }
 }
 
@@ -193,14 +223,15 @@ struct RecentActivityCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Realtime Activity")
-                .font(.headline)
+                .font(.system(size: 24, weight: .semibold, design: .serif))
             ForEach(events) { event in
                 EventRow(event: event)
             }
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)
         .padding(14)
-        .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
+        .background(TMDNSTheme.olive200, in: RoundedRectangle(cornerRadius: 8))
+        .overlay(RoundedRectangle(cornerRadius: 8).stroke(TMDNSTheme.olive400, lineWidth: 1))
     }
 }
 
@@ -210,12 +241,13 @@ struct TopDomainsCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Top Domains")
-                .font(.headline)
+                .font(.system(size: 24, weight: .semibold, design: .serif))
             TopDomainsList(rows: rows)
         }
         .frame(width: 360, alignment: .topLeading)
         .padding(14)
-        .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
+        .background(TMDNSTheme.olive200, in: RoundedRectangle(cornerRadius: 8))
+        .overlay(RoundedRectangle(cornerRadius: 8).stroke(TMDNSTheme.olive400, lineWidth: 1))
     }
 }
 
@@ -226,7 +258,10 @@ struct ActivityView: View {
         List(service.dashboard?.dashboard.recent ?? []) { event in
             EventRow(event: event)
                 .padding(.vertical, 4)
+                .listRowBackground(TMDNSTheme.olive200)
         }
+        .scrollContentBackground(.hidden)
+        .background(TMDNSTheme.olive300)
     }
 }
 
@@ -238,11 +273,12 @@ struct EventRow: View {
             HStack {
                 Text(event.queryName)
                     .font(.system(.body, design: .monospaced))
+                    .foregroundStyle(TMDNSTheme.stone900)
                     .lineLimit(1)
                 Spacer()
                 Text(event.action.uppercased())
                     .font(.caption.weight(.bold))
-                    .foregroundStyle(event.action == "blocked" ? .red : .green)
+                    .foregroundStyle(event.action == "blocked" ? TMDNSTheme.red : TMDNSTheme.green)
             }
             HStack {
                 Text(event.hostLabel)
@@ -254,8 +290,10 @@ struct EventRow: View {
                     .lineLimit(1)
             }
             .font(.caption)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(TMDNSTheme.stone500)
         }
+        .padding(8)
+        .background(TMDNSTheme.olive100, in: RoundedRectangle(cornerRadius: 7))
     }
 }
 
@@ -271,16 +309,20 @@ struct HostsView: View {
                     Spacer()
                     Text("\(host.count)")
                         .monospacedDigit()
+                        .foregroundStyle(TMDNSTheme.olive700)
                 }
                 Text(host.hostname.isEmpty ? "hostname not learned yet" : host.hostname)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(TMDNSTheme.stone500)
                 Text(host.sourceIP)
                     .font(.caption.monospaced())
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(TMDNSTheme.stone500)
             }
             .padding(.vertical, 6)
+            .listRowBackground(TMDNSTheme.olive200)
         }
+        .scrollContentBackground(.hidden)
+        .background(TMDNSTheme.olive300)
     }
 }
 
@@ -290,6 +332,8 @@ struct DomainsView: View {
     var body: some View {
         TopDomainsList(rows: service.dashboard?.dashboard.topDomains ?? [])
             .padding(20)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .background(TMDNSTheme.olive300)
     }
 }
 
@@ -303,18 +347,20 @@ struct TopDomainsList: View {
                 HStack {
                     Text(row.key)
                         .font(.system(.body, design: .monospaced))
+                        .foregroundStyle(TMDNSTheme.stone900)
                         .lineLimit(1)
                     Spacer()
                     Text("\(row.count)")
                         .monospacedDigit()
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(TMDNSTheme.stone500)
                     Button("Block") {
                         Task { await service.block(domain: row.key) }
                     }
                     .buttonStyle(.bordered)
                     .controlSize(.small)
+                    .tint(TMDNSTheme.red)
                 }
-                Divider()
+                Divider().overlay(TMDNSTheme.olive400.opacity(0.55))
             }
         }
     }
@@ -347,9 +393,11 @@ struct SettingsView: View {
             }
             Divider()
             Text("Daemon installation, launchd management, and privileged helper controls belong in the next packaging phase.")
-                .foregroundStyle(.secondary)
+                .foregroundStyle(TMDNSTheme.stone500)
         }
         .padding(24)
+        .scrollContentBackground(.hidden)
+        .background(TMDNSTheme.olive300)
     }
 }
 
@@ -362,7 +410,7 @@ struct MenuBarView: View {
                 .font(.headline)
             Text(service.statusText)
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(TMDNSTheme.stone500)
             Divider()
             Button("Open Dashboard") {
                 service.openWebDashboard()
@@ -376,6 +424,7 @@ struct MenuBarView: View {
         }
         .padding()
         .frame(width: 260)
+        .background(TMDNSTheme.olive100)
     }
 }
 
