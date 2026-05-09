@@ -254,9 +254,10 @@ final class TMDNSService: ObservableObject {
         NSWorkspace.shared.open(baseURL)
     }
 
-    func selectHost(_ id: Int) async {
+    func selectHost(_ id: Int, hours: Int = 24) async {
         do {
-            let (data, response) = try await data(path: "/api/hosts/\(id)")
+            let window = hours == 48 ? 48 : 24
+            let (data, response) = try await data(path: "/api/hosts/\(id)?hours=\(window)")
             guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
                 throw URLError(.badServerResponse)
             }
@@ -264,6 +265,10 @@ final class TMDNSService: ObservableObject {
         } catch {
             errorMessage = "Host detail failed"
         }
+    }
+
+    func clearSelectedHost() {
+        selectedHostDetail = nil
     }
 
     private var installedVersionForUpdate: String? {

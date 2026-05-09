@@ -150,15 +150,25 @@ struct Host: Decodable, Identifiable {
 
 struct HostDetail: Decodable {
     let host: Host
+    let windowHours: Int
+    let totalQueries: Int
+    let totalBlocked: Int
+    let uniqueDomains: Int
     let recent: [QueryEvent]
     let blocked: [QueryEvent]
     let topDomains: [TopRow]
+    let topActions: [TopRow]
 
     enum CodingKeys: String, CodingKey {
         case host
+        case windowHours = "window_hours"
+        case totalQueries = "total_queries"
+        case totalBlocked = "total_blocked"
+        case uniqueDomains = "unique_domains"
         case recent
         case blocked
         case topDomains = "top_domains"
+        case topActions = "top_actions"
     }
 }
 

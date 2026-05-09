@@ -578,80 +578,224 @@ struct EventRow: View {
 
 struct HostsView: View {
     @EnvironmentObject private var service: TMDNSService
+    @State private var selectedHostID: Int?
+    @State private var windowHours = 24
 
     var body: some View {
-        HStack(alignment: .top, spacing: 16) {
-            List(service.dashboard?.dashboard.topHosts ?? []) { host in
-                Button {
-                    Task { await service.selectHost(host.id) }
-                } label: {
-                    VStack(alignment: .leading, spacing: 4) {
-                        HStack {
-                            Text(host.label.isEmpty ? (host.hostname.isEmpty ? host.sourceIP : host.hostname) : host.label)
-                                .font(.headline)
-                            Spacer()
-                            Text("\(host.count)")
-                                .monospacedDigit()
-                                .foregroundStyle(TMDNSTheme.olive700)
-                        }
-                        Text(host.hostname.isEmpty ? "hostname not learned yet" : host.hostname)
-                            .font(.caption)
-                            .foregroundStyle(TMDNSTheme.stone500)
-                        Text(host.sourceIP)
-                            .font(.caption.monospaced())
-                            .foregroundStyle(TMDNSTheme.stone500)
+        Group {
+            if let detail = service.selectedHostDetail {
+                HostDetailPage(
+                    detail: detail,
+                    windowHours: $windowHours,
+                    onBack: {
+                        selectedHostID = nil
+                        service.clearSelectedHost()
+                    },
+                    onWindowChange: { hours in
+                        selectedHostID = detail.host.id
+                        Task { await service.selectHost(detail.host.id, hours: hours) }
                     }
-                    .foregroundStyle(TMDNSTheme.stone900)
+                )
+            } else {
+                List(service.dashboard?.dashboard.topHosts ?? []) { host in
+                    Button {
+                        selectedHostID = host.id
+                        windowHours = 24
+                        Task { await service.selectHost(host.id, hours: windowHours) }
+                    } label: {
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack {
+                                Text(host.label.isEmpty ? (host.hostname.isEmpty ? host.sourceIP : host.hostname) : host.label)
+                                    .font(.headline)
+                                Spacer()
+                                Text("\(host.count)")
+                                    .monospacedDigit()
+                                    .foregroundStyle(TMDNSTheme.olive700)
+                            }
+                            Text(host.hostname.isEmpty ? "hostname not learned yet" : host.hostname)
+                                .font(.caption)
+                                .foregroundStyle(TMDNSTheme.stone500)
+                            Text(host.sourceIP)
+                                .font(.caption.monospaced())
+                                .foregroundStyle(TMDNSTheme.stone500)
+                        }
+                        .foregroundStyle(TMDNSTheme.stone900)
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.vertical, 6)
+                    .listRowBackground(TMDNSTheme.olive200)
                 }
-                .buttonStyle(.plain)
-                .padding(.vertical, 6)
-                .listRowBackground(TMDNSTheme.olive200)
+                .scrollContentBackground(.hidden)
             }
-            .frame(minWidth: 360)
-            .scrollContentBackground(.hidden)
-            HostDetailPanel(detail: service.selectedHostDetail)
         }
         .padding(16)
         .background(TMDNSTheme.olive300)
     }
 }
 
-struct HostDetailPanel: View {
+struct HostDetailPage: View {
     @EnvironmentObject private var service: TMDNSService
-    let detail: HostDetail?
+    let detail: HostDetail
+    @Binding var windowHours: Int
+    let onBack: () -> Void
+    let onWindowChange: (Int) -> Void
 
     var body: some View {
-        ListPanel(title: detail.map { displayName($0.host) } ?? "Host Detail") {
-            if let detail {
-                HStack {
-                    MetricCard(title: "Queries", value: "\(detail.host.queryCount)")
-                    MetricCard(title: "Blocked", value: "\(detail.host.blockCount)")
-                    MetricCard(title: "Identity", value: detail.host.identityConfidence)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                HStack(alignment: .center, spacing: 12) {
+                    Button {
+                        onBack()
+                    } label: {
+                        Label("Hosts", systemImage: "chevron.left")
+                    }
+                    .buttonStyle(.bordered)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(displayName(detail.host))
+                            .font(.system(size: 34, weight: .semibold, design: .serif))
+                        Text("\(detail.host.sourceIP) · DNS \(detail.host.hostname.isEmpty ? "not learned" : detail.host.hostname)")
+                            .font(.caption.monospaced())
+                            .foregroundStyle(TMDNSTheme.stone500)
+                    }
+                    Spacer()
+                    Picker("Window", selection: Binding(
+                        get: { windowHours },
+                        set: { value in
+                            windowHours = value
+                            onWindowChange(value)
+                        }
+                    )) {
+                        Text("24 hours").tag(24)
+                        Text("48 hours").tag(48)
+                    }
+                    .pickerStyle(.segmented)
+                    .frame(width: 190)
                 }
-                Text("DNS \(detail.host.hostname.isEmpty ? "not learned" : detail.host.hostname) · MAC \(detail.host.mac.isEmpty ? "not learned" : detail.host.mac)")
-                    .font(.caption.monospaced())
-                    .foregroundStyle(TMDNSTheme.stone500)
+                .padding(20)
+                .background(TMDNSTheme.olive200, in: RoundedRectangle(cornerRadius: 8))
+                .overlay(RoundedRectangle(cornerRadius: 8).stroke(TMDNSTheme.olive400, lineWidth: 1))
 
-                Text("Top Sites")
-                    .font(.headline)
-                TopDomainsList(rows: detail.topDomains)
-
-                Text("Timeline")
-                    .font(.headline)
-                ForEach(detail.recent.prefix(50)) { event in
-                    EventRow(event: event)
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 4), spacing: 12) {
+                    MetricCard(title: "\(detail.windowHours)h Hits", value: "\(detail.totalQueries)")
+                    MetricCard(title: "Blocked", value: "\(detail.totalBlocked)")
+                    MetricCard(title: "Unique Sites", value: "\(detail.uniqueDomains)")
+                    MetricCard(title: "Identity", value: detail.host.identityConfidence.isEmpty ? "unknown" : detail.host.identityConfidence)
                 }
-            } else {
-                Text("Select a host to inspect destinations and request history.")
-                    .foregroundStyle(TMDNSTheme.stone500)
+
+                HStack(alignment: .top, spacing: 16) {
+                    HostInfoCard(host: detail.host)
+                    BreakdownCard(title: "Request Breakdown", rows: detail.topDomains, total: detail.totalQueries, allowBlocking: true)
+                    BreakdownCard(title: "Actions", rows: detail.topActions, total: detail.totalQueries, allowBlocking: false)
+                }
+
+                ListPanel(title: "Timeline") {
+                    if detail.recent.isEmpty {
+                        Text("No DNS requests recorded in this window.")
+                            .foregroundStyle(TMDNSTheme.stone500)
+                    }
+                    ForEach(detail.recent) { event in
+                        EventRow(event: event)
+                    }
+                }
             }
+            .padding(20)
         }
+        .background(TMDNSTheme.olive300)
     }
 
     private func displayName(_ host: Host) -> String {
         if !host.label.isEmpty { return host.label }
         if !host.hostname.isEmpty { return host.hostname }
         return host.sourceIP
+    }
+}
+
+struct HostInfoCard: View {
+    let host: Host
+
+    var body: some View {
+        ListPanel(title: "Host Info") {
+            InfoLine(label: "IP", value: host.sourceIP)
+            InfoLine(label: "Hostname", value: host.hostname.isEmpty ? "not learned" : host.hostname)
+            InfoLine(label: "MAC", value: host.mac.isEmpty ? "not learned" : host.mac)
+            InfoLine(label: "Vendor", value: host.vendor.isEmpty ? "not learned" : host.vendor)
+        }
+    }
+}
+
+struct BreakdownCard: View {
+    @EnvironmentObject private var service: TMDNSService
+    let title: String
+    let rows: [TopRow]
+    let total: Int
+    let allowBlocking: Bool
+
+    var body: some View {
+        ListPanel(title: title) {
+            if rows.isEmpty {
+                Text("No activity in this window.")
+                    .foregroundStyle(TMDNSTheme.stone500)
+            }
+            ForEach(rows) { row in
+                HStack(spacing: 10) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(row.key)
+                            .font(.system(.body, design: .monospaced))
+                            .foregroundStyle(TMDNSTheme.stone900)
+                            .lineLimit(1)
+                        ProgressView(value: percentage(row.count), total: 100)
+                            .tint(TMDNSTheme.olive700)
+                    }
+                    Spacer()
+                    Text("\(row.count)")
+                        .font(.caption.monospacedDigit().weight(.semibold))
+                        .foregroundStyle(TMDNSTheme.stone500)
+                    Text(percentLabel(row.count))
+                        .font(.caption.monospacedDigit().weight(.bold))
+                        .foregroundStyle(TMDNSTheme.olive700)
+                        .frame(width: 58, alignment: .trailing)
+                    if allowBlocking {
+                        Button("Block") {
+                            Task { await service.block(domain: row.key) }
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                        .tint(TMDNSTheme.red)
+                    }
+                }
+                .padding(8)
+                .background(TMDNSTheme.olive100, in: RoundedRectangle(cornerRadius: 7))
+            }
+        }
+    }
+
+    private func percentage(_ count: Int) -> Double {
+        guard total > 0 else { return 0 }
+        return (Double(count) / Double(total)) * 100
+    }
+
+    private func percentLabel(_ count: Int) -> String {
+        "\(Int(percentage(count).rounded()))%"
+    }
+}
+
+struct InfoLine: View {
+    let label: String
+    let value: String
+
+    var body: some View {
+        HStack {
+            Text(label.uppercased())
+                .font(.caption.weight(.bold))
+                .foregroundStyle(TMDNSTheme.stone500)
+            Spacer()
+            Text(value)
+                .font(.caption.monospaced())
+                .foregroundStyle(TMDNSTheme.stone900)
+                .textSelection(.enabled)
+        }
+        .padding(8)
+        .background(TMDNSTheme.olive100, in: RoundedRectangle(cornerRadius: 7))
     }
 }
 
