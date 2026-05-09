@@ -4,6 +4,19 @@ struct DashboardResponse: Decodable {
     let dashboard: DashboardSummary
     let dns: DNSRuntime
     let system: SystemStats?
+    let version: VersionInfo?
+}
+
+struct VersionInfo: Decodable {
+    let version: String
+    let commit: String
+    let buildTime: String
+
+    enum CodingKeys: String, CodingKey {
+        case version
+        case commit
+        case buildTime = "build_time"
+    }
 }
 
 struct DashboardSummary: Decodable {

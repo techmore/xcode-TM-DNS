@@ -339,6 +339,7 @@ struct OverviewView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 HeaderCard()
+                UpdateCard()
                 MetricGrid()
                 HStack(alignment: .top, spacing: 16) {
                     RecentActivityCard(events: Array(service.dashboard?.dashboard.recent.prefix(8) ?? []))
@@ -378,6 +379,66 @@ struct HeaderCard: View {
         .foregroundStyle(TMDNSTheme.stone900)
         .background(TMDNSTheme.olive200, in: RoundedRectangle(cornerRadius: 8))
         .overlay(RoundedRectangle(cornerRadius: 8).stroke(TMDNSTheme.olive400, lineWidth: 1))
+    }
+}
+
+struct UpdateCard: View {
+    @EnvironmentObject private var service: TMDNSService
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: iconName)
+                .font(.title2)
+                .foregroundStyle(iconColor)
+                .frame(width: 34, height: 34)
+                .background(TMDNSTheme.olive100, in: RoundedRectangle(cornerRadius: 7))
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Software Update")
+                    .font(.headline)
+                    .foregroundStyle(TMDNSTheme.stone900)
+                Text(service.updateStatus.message)
+                    .font(.caption)
+                    .foregroundStyle(TMDNSTheme.stone500)
+            }
+            Spacer()
+            if let release = service.availableUpdate {
+                Link("Release Notes", destination: release.htmlURL)
+                    .font(.caption.weight(.semibold))
+            }
+            Button(service.updateStatus.canInstall ? "Update" : "Check") {
+                Task {
+                    if service.updateStatus.canInstall {
+                        await service.installAvailableUpdate()
+                    } else {
+                        await service.checkForUpdates(userInitiated: true)
+                    }
+                }
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(service.updateStatus.canInstall ? TMDNSTheme.green : TMDNSTheme.olive700)
+        }
+        .padding(14)
+        .foregroundStyle(TMDNSTheme.stone900)
+        .background(TMDNSTheme.olive200, in: RoundedRectangle(cornerRadius: 8))
+        .overlay(RoundedRectangle(cornerRadius: 8).stroke(TMDNSTheme.olive400, lineWidth: 1))
+    }
+
+    private var iconName: String {
+        switch service.updateStatus {
+        case .available: "arrow.down.circle.fill"
+        case .downloading, .verifying: "clock.arrow.circlepath"
+        case .failed: "exclamationmark.triangle.fill"
+        case .current, .readyToInstall: "checkmark.seal.fill"
+        case .idle, .checking: "arrow.triangle.2.circlepath"
+        }
+    }
+
+    private var iconColor: Color {
+        switch service.updateStatus {
+        case .available: TMDNSTheme.green
+        case .failed: TMDNSTheme.red
+        default: TMDNSTheme.olive700
+        }
     }
 }
 
@@ -893,6 +954,8 @@ struct SettingsView: View {
                 Task { await service.refresh() }
             }
             Divider()
+            UpdateCard()
+            Divider()
             Text("The admin token is stored on the TM-DNS Mac as admin-token.txt next to the database unless TMDNS_ADMIN_TOKEN is configured.")
                 .foregroundStyle(TMDNSTheme.stone500)
         }
@@ -919,6 +982,18 @@ struct MenuBarView: View {
             Button("Refresh") {
                 Task { await service.refresh() }
             }
+            if service.updateStatus.canInstall {
+                Button("Update") {
+                    Task { await service.installAvailableUpdate() }
+                }
+            } else {
+                Button("Check for Updates") {
+                    Task { await service.checkForUpdates(userInitiated: true) }
+                }
+            }
+            Text(service.updateStatus.message)
+                .font(.caption)
+                .foregroundStyle(TMDNSTheme.stone500)
             Button("Quit TM-DNS App") {
                 NSApplication.shared.terminate(nil)
             }

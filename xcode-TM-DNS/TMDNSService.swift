@@ -14,8 +14,12 @@ final class TMDNSService: ObservableObject {
     @Published var baseURLString = "http://127.0.0.1:8080"
     @Published var adminToken = ""
     @Published private(set) var selectedHostDetail: HostDetail?
+    @Published private(set) var updateStatus = UpdateStatus.idle
+    @Published private(set) var availableUpdate: GitHubRelease?
 
     private var pollingTask: Task<Void, Never>?
+    private var updateCheckTask: Task<Void, Never>?
+    private let releasesURL = URL(string: "https://api.github.com/repos/techmore/TM-DNS/releases/latest")!
 
     var isHealthy: Bool {
         dashboard != nil && errorMessage == nil
@@ -43,6 +47,7 @@ final class TMDNSService: ObservableObject {
                 try? await Task.sleep(for: .seconds(2))
             }
         }
+        startUpdateChecks()
     }
 
     func refresh() async {
@@ -58,6 +63,68 @@ final class TMDNSService: ObservableObject {
             errorMessage = nil
         } catch {
             errorMessage = "Service offline"
+        }
+    }
+
+    func checkForUpdates(userInitiated: Bool = false) async {
+        if userInitiated {
+            updateStatus = .checking
+        }
+        do {
+            var request = URLRequest(url: releasesURL)
+            request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+            request.setValue("TM-DNS", forHTTPHeaderField: "User-Agent")
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+                throw URLError(.badServerResponse)
+            }
+            let release = try JSONDecoder.tmdns.decode(GitHubRelease.self, from: data)
+            guard let packageAsset = release.packageAsset else {
+                throw UpdateError.noPackageAsset
+            }
+            let currentVersion = installedVersion
+            if isRelease(release.version, newerThan: currentVersion) {
+                availableUpdate = release.withPackageAsset(packageAsset)
+                updateStatus = .available(release.version)
+            } else {
+                availableUpdate = nil
+                updateStatus = .current
+            }
+        } catch {
+            if userInitiated {
+                updateStatus = .failed("Update check failed")
+            }
+        }
+    }
+
+    func installAvailableUpdate() async {
+        guard let release = availableUpdate, let asset = release.packageAsset else {
+            updateStatus = .failed("No update available")
+            return
+        }
+        do {
+            updateStatus = .downloading(release.version)
+            let destination = FileManager.default.temporaryDirectory
+                .appendingPathComponent(asset.name)
+            if FileManager.default.fileExists(atPath: destination.path) {
+                try FileManager.default.removeItem(at: destination)
+            }
+            var request = URLRequest(url: asset.browserDownloadURL)
+            request.setValue("application/octet-stream", forHTTPHeaderField: "Accept")
+            request.setValue("TM-DNS", forHTTPHeaderField: "User-Agent")
+            let (downloadURL, response) = try await URLSession.shared.download(for: request)
+            guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+                throw URLError(.badServerResponse)
+            }
+            try FileManager.default.moveItem(at: downloadURL, to: destination)
+
+            updateStatus = .verifying(release.version)
+            try await verifyPackage(at: destination)
+
+            updateStatus = .readyToInstall(release.version)
+            NSWorkspace.shared.open(destination)
+        } catch {
+            updateStatus = .failed("Update failed")
         }
     }
 
@@ -183,11 +250,159 @@ final class TMDNSService: ObservableObject {
             errorMessage = "Host detail failed"
         }
     }
+
+    private var installedVersion: String {
+        if let version = dashboard?.version?.version, !version.isEmpty {
+            return version
+        }
+        let bundleVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String
+        return bundleVersion ?? "dev"
+    }
+
+    private func startUpdateChecks() {
+        guard updateCheckTask == nil else { return }
+        updateCheckTask = Task { [weak self] in
+            await self?.checkForUpdates()
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(21_600))
+                await self?.checkForUpdates()
+            }
+        }
+    }
+
+    private func isRelease(_ latest: String, newerThan current: String) -> Bool {
+        let latestParts = versionParts(latest)
+        let currentParts = versionParts(current)
+        guard !latestParts.isEmpty, !currentParts.isEmpty else {
+            return latest != current && current != "dev"
+        }
+        let width = max(latestParts.count, currentParts.count)
+        for index in 0..<width {
+            let left = index < latestParts.count ? latestParts[index] : 0
+            let right = index < currentParts.count ? currentParts[index] : 0
+            if left != right {
+                return left > right
+            }
+        }
+        return false
+    }
+
+    private func versionParts(_ version: String) -> [Int] {
+        version
+            .trimmingPrefix("v")
+            .split { !$0.isNumber }
+            .compactMap { Int($0) }
+    }
+
+    private func verifyPackage(at url: URL) async throws {
+        try await run("/usr/sbin/pkgutil", arguments: ["--check-signature", url.path], requiredOutput: "Developer ID Installer")
+        try await run("/usr/sbin/spctl", arguments: ["-a", "-vvv", "-t", "install", url.path], requiredOutput: "accepted")
+    }
+
+    private func run(_ launchPath: String, arguments: [String], requiredOutput: String) async throws {
+        try await withCheckedThrowingContinuation { continuation in
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: launchPath)
+            process.arguments = arguments
+            let pipe = Pipe()
+            process.standardOutput = pipe
+            process.standardError = pipe
+            process.terminationHandler = { process in
+                let data = pipe.fileHandleForReading.readDataToEndOfFile()
+                let output = String(data: data, encoding: .utf8) ?? ""
+                if process.terminationStatus == 0 && output.localizedCaseInsensitiveContains(requiredOutput) {
+                    continuation.resume()
+                } else {
+                    continuation.resume(throwing: UpdateError.verificationFailed)
+                }
+            }
+            do {
+                try process.run()
+            } catch {
+                continuation.resume(throwing: error)
+            }
+        }
+    }
+}
+
+enum UpdateStatus: Equatable {
+    case idle
+    case checking
+    case current
+    case available(String)
+    case downloading(String)
+    case verifying(String)
+    case readyToInstall(String)
+    case failed(String)
+
+    var message: String {
+        switch self {
+        case .idle: "Updates not checked yet"
+        case .checking: "Checking for updates"
+        case .current: "TM-DNS is up to date"
+        case .available(let version): "Update available: \(version)"
+        case .downloading(let version): "Downloading \(version)"
+        case .verifying(let version): "Verifying \(version)"
+        case .readyToInstall(let version): "Installer opened for \(version)"
+        case .failed(let message): message
+        }
+    }
+
+    var canInstall: Bool {
+        if case .available = self { return true }
+        return false
+    }
+}
+
+struct GitHubRelease: Decodable {
+    let tagName: String
+    let name: String?
+    let htmlURL: URL
+    let assets: [GitHubReleaseAsset]
+
+    enum CodingKeys: String, CodingKey {
+        case tagName = "tag_name"
+        case name
+        case htmlURL = "html_url"
+        case assets
+    }
+
+    var version: String {
+        tagName.trimmingPrefix("v")
+    }
+
+    var packageAsset: GitHubReleaseAsset? {
+        assets.first { $0.name.hasSuffix(".pkg") && $0.name.hasPrefix("TM-DNS-") }
+    }
+
+    func withPackageAsset(_ asset: GitHubReleaseAsset) -> GitHubRelease {
+        GitHubRelease(tagName: tagName, name: name, htmlURL: htmlURL, assets: [asset])
+    }
+}
+
+struct GitHubReleaseAsset: Decodable {
+    let name: String
+    let browserDownloadURL: URL
+
+    enum CodingKeys: String, CodingKey {
+        case name
+        case browserDownloadURL = "browser_download_url"
+    }
+}
+
+enum UpdateError: Error {
+    case noPackageAsset
+    case verificationFailed
 }
 
 private extension String {
     func trimmingSuffix(_ suffix: String) -> String {
         guard hasSuffix(suffix) else { return self }
         return String(dropLast(suffix.count))
+    }
+
+    func trimmingPrefix(_ prefix: String) -> String {
+        guard hasPrefix(prefix) else { return self }
+        return String(dropFirst(prefix.count))
     }
 }
