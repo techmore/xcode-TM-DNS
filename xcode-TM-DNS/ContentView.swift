@@ -175,11 +175,12 @@ struct SetupView: View {
                         StatusPill(isHealthy: service.isHealthy, text: service.isHealthy ? "API connected" : "API offline")
                     }
                     Text("Use this checklist when turning TM-DNS into the active resolver for a network. Verify the local service first, then move clients or the router to the Mac's DNS address.")
-                        .foregroundStyle(TMDNSTheme.olive300)
+                        .foregroundStyle(TMDNSTheme.stone500)
                 }
                 .padding(20)
-                .foregroundStyle(TMDNSTheme.olive50)
-                .background(TMDNSTheme.olive950, in: RoundedRectangle(cornerRadius: 8))
+                .foregroundStyle(TMDNSTheme.stone900)
+                .background(TMDNSTheme.olive200, in: RoundedRectangle(cornerRadius: 8))
+                .overlay(RoundedRectangle(cornerRadius: 8).stroke(TMDNSTheme.olive400, lineWidth: 1))
 
                 LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
                     SetupStepCard(
@@ -275,9 +276,9 @@ struct SetupStepCard<Action: View>: View {
             HStack(alignment: .top, spacing: 10) {
                 Text(number)
                     .font(.caption.weight(.black))
-                    .foregroundStyle(TMDNSTheme.olive50)
+                    .foregroundStyle(TMDNSTheme.olive950)
                     .frame(width: 26, height: 26)
-                    .background(TMDNSTheme.olive700, in: RoundedRectangle(cornerRadius: 6))
+                    .background(TMDNSTheme.olive300, in: RoundedRectangle(cornerRadius: 6))
                 VStack(alignment: .leading, spacing: 4) {
                     Text(title)
                         .font(.system(size: 22, weight: .semibold, design: .serif))
@@ -359,14 +360,15 @@ struct HeaderCard: View {
                 Spacer()
                 Text(service.statusText)
                     .font(.callout.weight(.medium))
-                    .foregroundStyle(service.isHealthy ? TMDNSTheme.olive300 : TMDNSTheme.red)
+                    .foregroundStyle(service.isHealthy ? TMDNSTheme.olive700 : TMDNSTheme.red)
             }
             Text("Native control shell for the local TM-DNS resolver, policy dashboard, and school network visibility.")
-                .foregroundStyle(TMDNSTheme.olive300)
+                .foregroundStyle(TMDNSTheme.stone500)
         }
         .padding(20)
-        .foregroundStyle(TMDNSTheme.olive50)
-        .background(TMDNSTheme.olive950, in: RoundedRectangle(cornerRadius: 8))
+        .foregroundStyle(TMDNSTheme.stone900)
+        .background(TMDNSTheme.olive200, in: RoundedRectangle(cornerRadius: 8))
+        .overlay(RoundedRectangle(cornerRadius: 8).stroke(TMDNSTheme.olive400, lineWidth: 1))
     }
 }
 
@@ -631,11 +633,12 @@ struct ListsView: View {
                         .tint(TMDNSTheme.olive700)
                     }
                     Text("Enable curated blocklist sources or add a raw GitHub/custom URL. Refresh compiles enabled lists into local DNS enforcement entries.")
-                        .foregroundStyle(TMDNSTheme.olive300)
+                        .foregroundStyle(TMDNSTheme.stone500)
                 }
                 .padding(20)
-                .foregroundStyle(TMDNSTheme.olive50)
-                .background(TMDNSTheme.olive950, in: RoundedRectangle(cornerRadius: 8))
+                .foregroundStyle(TMDNSTheme.stone900)
+                .background(TMDNSTheme.olive200, in: RoundedRectangle(cornerRadius: 8))
+                .overlay(RoundedRectangle(cornerRadius: 8).stroke(TMDNSTheme.olive400, lineWidth: 1))
 
                 VStack(alignment: .leading, spacing: 10) {
                     Text("Add Custom Source")
