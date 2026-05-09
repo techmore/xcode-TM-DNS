@@ -158,8 +158,15 @@ struct SetupView: View {
         "dig @127.0.0.1 -p 53 example.com"
     }
 
+    private var detectedLANIP: String {
+        service.detectedLANIP ?? "LAN IP not detected"
+    }
+
     private var lanDigCommand: String {
-        "dig @<detected-lan-ip> example.com"
+        guard let ip = service.detectedLANIP else {
+            return "route get default | grep interface\nipconfig getifaddr <interface>"
+        }
+        return "dig @\(ip) example.com"
     }
 
     private var liveCommand: String {
@@ -221,7 +228,7 @@ struct SetupView: View {
                     SetupStepCard(
                         number: "4",
                         title: "Test LAN DNS address",
-                        detail: "From the Mac or another machine on the same network, query the Mac's LAN DNS address directly.",
+                        detail: "From the Mac or another machine on the same network, query this Mac's detected LAN DNS address: \(detectedLANIP).",
                         command: lanDigCommand
                     )
 

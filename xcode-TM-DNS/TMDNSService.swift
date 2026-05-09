@@ -1,6 +1,7 @@
 import AppKit
 import Combine
 import Foundation
+import SystemConfiguration
 
 @MainActor
 final class TMDNSService: ObservableObject {
@@ -16,6 +17,7 @@ final class TMDNSService: ObservableObject {
     @Published private(set) var selectedHostDetail: HostDetail?
     @Published private(set) var updateStatus = UpdateStatus.idle
     @Published private(set) var availableUpdate: GitHubRelease?
+    @Published private(set) var detectedLANIP: String?
 
     private var pollingTask: Task<Void, Never>?
     private var updateCheckTask: Task<Void, Never>?
@@ -41,6 +43,7 @@ final class TMDNSService: ObservableObject {
 
     func startPolling() async {
         guard pollingTask == nil else { return }
+        detectedLANIP = Self.detectLANIP()
         pollingTask = Task { [weak self] in
             while !Task.isCancelled {
                 await self?.refresh()
@@ -51,6 +54,7 @@ final class TMDNSService: ObservableObject {
     }
 
     func refresh() async {
+        detectedLANIP = Self.detectLANIP()
         do {
             let (data, response) = try await data(path: "/api/dashboard")
             guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
@@ -323,6 +327,85 @@ final class TMDNSService: ObservableObject {
             }
         }
     }
+
+    private static func detectLANIP() -> String? {
+        var addresses: [InterfaceAddress] = []
+        var pointer: UnsafeMutablePointer<ifaddrs>?
+        guard getifaddrs(&pointer) == 0, let first = pointer else {
+            return nil
+        }
+        defer { freeifaddrs(pointer) }
+
+        var cursor: UnsafeMutablePointer<ifaddrs>? = first
+        while let current = cursor {
+            defer { cursor = current.pointee.ifa_next }
+            let flags = Int32(current.pointee.ifa_flags)
+            guard flags & IFF_UP != 0, flags & IFF_LOOPBACK == 0 else {
+                continue
+            }
+            guard let address = current.pointee.ifa_addr, address.pointee.sa_family == UInt8(AF_INET) else {
+                continue
+            }
+            let name = String(cString: current.pointee.ifa_name)
+            var host = [CChar](repeating: 0, count: Int(NI_MAXHOST))
+            let result = getnameinfo(
+                address,
+                socklen_t(address.pointee.sa_len),
+                &host,
+                socklen_t(host.count),
+                nil,
+                0,
+                NI_NUMERICHOST
+            )
+            guard result == 0 else {
+                continue
+            }
+            let ip = String(cString: host)
+            guard !ip.hasPrefix("127."), !ip.hasPrefix("169.254.") else {
+                continue
+            }
+            addresses.append(InterfaceAddress(name: name, ip: ip, score: scoreInterface(name)))
+        }
+        return addresses.sorted { left, right in
+            if left.score == right.score {
+                return left.name < right.name
+            }
+            return left.score > right.score
+        }.first?.ip
+    }
+
+    private static func scoreInterface(_ name: String) -> Int {
+        let displayName = displayName(forInterface: name).lowercased()
+        let combined = "\(name.lowercased()) \(displayName)"
+        if combined.contains("ethernet") || combined.contains("usb") || combined.contains("thunderbolt") || combined.contains("lan") {
+            return 100
+        }
+        if combined.contains("wi-fi") || combined.contains("wifi") || combined.contains("airport") {
+            return 50
+        }
+        if name.hasPrefix("en") {
+            return 40
+        }
+        return 10
+    }
+
+    private static func displayName(forInterface name: String) -> String {
+        guard let interfaces = SCNetworkInterfaceCopyAll() as? [SCNetworkInterface] else {
+            return ""
+        }
+        for interface in interfaces {
+            if SCNetworkInterfaceGetBSDName(interface) as String? == name {
+                return (SCNetworkInterfaceGetLocalizedDisplayName(interface) as String?) ?? ""
+            }
+        }
+        return ""
+    }
+}
+
+private struct InterfaceAddress {
+    let name: String
+    let ip: String
+    let score: Int
 }
 
 enum UpdateStatus: Equatable {
