@@ -107,6 +107,44 @@ struct TopHost: Decodable, Identifiable {
     }
 }
 
+struct Host: Decodable, Identifiable {
+    let id: Int
+    let sourceIP: String
+    let label: String
+    let hostname: String
+    let mac: String
+    let vendor: String
+    let identityConfidence: String
+    let queryCount: Int
+    let blockCount: Int
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case sourceIP = "source_ip"
+        case label
+        case hostname
+        case mac
+        case vendor
+        case identityConfidence = "identity_confidence"
+        case queryCount = "query_count"
+        case blockCount = "block_count"
+    }
+}
+
+struct HostDetail: Decodable {
+    let host: Host
+    let recent: [QueryEvent]
+    let blocked: [QueryEvent]
+    let topDomains: [TopRow]
+
+    enum CodingKeys: String, CodingKey {
+        case host
+        case recent
+        case blocked
+        case topDomains = "top_domains"
+    }
+}
+
 struct RuleCreateRequest: Encodable {
     let target: String
     let note: String

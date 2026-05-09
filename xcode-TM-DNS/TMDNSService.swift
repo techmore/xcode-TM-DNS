@@ -12,6 +12,8 @@ final class TMDNSService: ObservableObject {
     @Published private(set) var lastUpdated: Date?
     @Published private(set) var errorMessage: String?
     @Published var baseURLString = "http://127.0.0.1:8080"
+    @Published var adminToken = ""
+    @Published private(set) var selectedHostDetail: HostDetail?
 
     private var pollingTask: Task<Void, Never>?
 
@@ -45,8 +47,7 @@ final class TMDNSService: ObservableObject {
 
     func refresh() async {
         do {
-            let url = baseURL.appending(path: "/api/dashboard")
-            let (data, response) = try await URLSession.shared.data(from: url)
+            let (data, response) = try await data(path: "/api/dashboard")
             guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
                 throw URLError(.badServerResponse)
             }
@@ -60,10 +61,23 @@ final class TMDNSService: ObservableObject {
         }
     }
 
+    private func request(path: String, method: String = "GET") -> URLRequest {
+        var request = URLRequest(url: baseURL.appending(path: path))
+        request.httpMethod = method
+        if !adminToken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            request.setValue("Bearer \(adminToken.trimmingCharacters(in: .whitespacesAndNewlines))", forHTTPHeaderField: "Authorization")
+        }
+        return request
+    }
+
+    private func data(path: String) async throws -> (Data, URLResponse) {
+        try await URLSession.shared.data(for: request(path: path))
+    }
+
     func refreshBlocklists() async {
         do {
-            async let presetsData = URLSession.shared.data(from: baseURL.appending(path: "/api/blocklist-presets"))
-            async let sourcesData = URLSession.shared.data(from: baseURL.appending(path: "/api/blocklist-sources"))
+            async let presetsData = data(path: "/api/blocklist-presets")
+            async let sourcesData = data(path: "/api/blocklist-sources")
             let (presetResult, sourceResult) = try await (presetsData, sourcesData)
             blocklistPresets = try JSONDecoder.tmdns.decode([BlocklistPreset].self, from: presetResult.0)
             blocklistSources = try JSONDecoder.tmdns.decode([BlocklistSource].self, from: sourceResult.0)
@@ -84,8 +98,7 @@ final class TMDNSService: ObservableObject {
 
     func addSource(name: String, url: String, format: String) async {
         do {
-            var request = URLRequest(url: baseURL.appending(path: "/api/blocklist-sources"))
-            request.httpMethod = "POST"
+            var request = request(path: "/api/blocklist-sources", method: "POST")
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
             request.httpBody = try JSONEncoder().encode(BlocklistSourceCreateRequest(name: name, url: url, format: format))
             let (_, response) = try await URLSession.shared.data(for: request)
@@ -100,8 +113,7 @@ final class TMDNSService: ObservableObject {
 
     func refreshEnabledBlocklists() async {
         do {
-            var request = URLRequest(url: baseURL.appending(path: "/api/blocklists/refresh"))
-            request.httpMethod = "POST"
+            let request = request(path: "/api/blocklists/refresh", method: "POST")
             let (data, response) = try await URLSession.shared.data(for: request)
             guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
                 throw URLError(.badServerResponse)
@@ -115,7 +127,7 @@ final class TMDNSService: ObservableObject {
 
     func refreshAudit() async {
         do {
-            let (data, response) = try await URLSession.shared.data(from: baseURL.appending(path: "/api/audit"))
+            let (data, response) = try await data(path: "/api/audit")
             guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
                 throw URLError(.badServerResponse)
             }
@@ -127,8 +139,7 @@ final class TMDNSService: ObservableObject {
 
     private func patchEnabled(path: String, enabled: Bool) async {
         do {
-            var request = URLRequest(url: baseURL.appending(path: path))
-            request.httpMethod = "PATCH"
+            var request = request(path: path, method: "PATCH")
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
             request.httpBody = try JSONEncoder().encode(["enabled": enabled])
             let (_, response) = try await URLSession.shared.data(for: request)
@@ -144,8 +155,7 @@ final class TMDNSService: ObservableObject {
         let target = domain.trimmingCharacters(in: .whitespacesAndNewlines).lowercased().trimmingSuffix(".")
         guard !target.isEmpty else { return }
         do {
-            var request = URLRequest(url: baseURL.appending(path: "/api/rules/block"))
-            request.httpMethod = "POST"
+            var request = request(path: "/api/rules/block", method: "POST")
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
             request.httpBody = try JSONEncoder().encode(RuleCreateRequest(target: target, note: "blocked from macOS app"))
             let (_, response) = try await URLSession.shared.data(for: request)
@@ -160,6 +170,18 @@ final class TMDNSService: ObservableObject {
 
     func openWebDashboard() {
         NSWorkspace.shared.open(baseURL)
+    }
+
+    func selectHost(_ id: Int) async {
+        do {
+            let (data, response) = try await data(path: "/api/hosts/\(id)")
+            guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+                throw URLError(.badServerResponse)
+            }
+            selectedHostDetail = try JSONDecoder.tmdns.decode(HostDetail.self, from: data)
+        } catch {
+            errorMessage = "Host detail failed"
+        }
     }
 }
 

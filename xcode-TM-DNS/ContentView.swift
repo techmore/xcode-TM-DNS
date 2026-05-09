@@ -508,28 +508,78 @@ struct HostsView: View {
     @EnvironmentObject private var service: TMDNSService
 
     var body: some View {
-        List(service.dashboard?.dashboard.topHosts ?? []) { host in
-            VStack(alignment: .leading, spacing: 4) {
-                HStack {
-                    Text(host.label.isEmpty ? (host.hostname.isEmpty ? host.sourceIP : host.hostname) : host.label)
-                        .font(.headline)
-                    Spacer()
-                    Text("\(host.count)")
-                        .monospacedDigit()
-                        .foregroundStyle(TMDNSTheme.olive700)
+        HStack(alignment: .top, spacing: 16) {
+            List(service.dashboard?.dashboard.topHosts ?? []) { host in
+                Button {
+                    Task { await service.selectHost(host.id) }
+                } label: {
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack {
+                            Text(host.label.isEmpty ? (host.hostname.isEmpty ? host.sourceIP : host.hostname) : host.label)
+                                .font(.headline)
+                            Spacer()
+                            Text("\(host.count)")
+                                .monospacedDigit()
+                                .foregroundStyle(TMDNSTheme.olive700)
+                        }
+                        Text(host.hostname.isEmpty ? "hostname not learned yet" : host.hostname)
+                            .font(.caption)
+                            .foregroundStyle(TMDNSTheme.stone500)
+                        Text(host.sourceIP)
+                            .font(.caption.monospaced())
+                            .foregroundStyle(TMDNSTheme.stone500)
+                    }
+                    .foregroundStyle(TMDNSTheme.stone900)
                 }
-                Text(host.hostname.isEmpty ? "hostname not learned yet" : host.hostname)
-                    .font(.caption)
-                    .foregroundStyle(TMDNSTheme.stone500)
-                Text(host.sourceIP)
+                .buttonStyle(.plain)
+                .padding(.vertical, 6)
+                .listRowBackground(TMDNSTheme.olive200)
+            }
+            .frame(minWidth: 360)
+            .scrollContentBackground(.hidden)
+            HostDetailPanel(detail: service.selectedHostDetail)
+        }
+        .padding(16)
+        .background(TMDNSTheme.olive300)
+    }
+}
+
+struct HostDetailPanel: View {
+    @EnvironmentObject private var service: TMDNSService
+    let detail: HostDetail?
+
+    var body: some View {
+        ListPanel(title: detail.map { displayName($0.host) } ?? "Host Detail") {
+            if let detail {
+                HStack {
+                    MetricCard(title: "Queries", value: "\(detail.host.queryCount)")
+                    MetricCard(title: "Blocked", value: "\(detail.host.blockCount)")
+                    MetricCard(title: "Identity", value: detail.host.identityConfidence)
+                }
+                Text("DNS \(detail.host.hostname.isEmpty ? "not learned" : detail.host.hostname) · MAC \(detail.host.mac.isEmpty ? "not learned" : detail.host.mac)")
                     .font(.caption.monospaced())
                     .foregroundStyle(TMDNSTheme.stone500)
+
+                Text("Top Sites")
+                    .font(.headline)
+                TopDomainsList(rows: detail.topDomains)
+
+                Text("Timeline")
+                    .font(.headline)
+                ForEach(detail.recent.prefix(50)) { event in
+                    EventRow(event: event)
+                }
+            } else {
+                Text("Select a host to inspect destinations and request history.")
+                    .foregroundStyle(TMDNSTheme.stone500)
             }
-            .padding(.vertical, 6)
-            .listRowBackground(TMDNSTheme.olive200)
         }
-        .scrollContentBackground(.hidden)
-        .background(TMDNSTheme.olive300)
+    }
+
+    private func displayName(_ host: Host) -> String {
+        if !host.label.isEmpty { return host.label }
+        if !host.hostname.isEmpty { return host.hostname }
+        return host.sourceIP
     }
 }
 
@@ -838,11 +888,12 @@ struct SettingsView: View {
     var body: some View {
         Form {
             TextField("Local API URL", text: $service.baseURLString)
+            SecureField("Admin token", text: $service.adminToken)
             Button("Refresh Connection") {
                 Task { await service.refresh() }
             }
             Divider()
-            Text("Daemon installation, launchd management, and privileged helper controls belong in the next packaging phase.")
+            Text("The admin token is stored on the TM-DNS Mac as admin-token.txt next to the database unless TMDNS_ADMIN_TOKEN is configured.")
                 .foregroundStyle(TMDNSTheme.stone500)
         }
         .padding(24)
