@@ -580,6 +580,7 @@ struct HostsView: View {
     @EnvironmentObject private var service: TMDNSService
     @State private var selectedHostID: Int?
     @State private var windowHours = 24
+    @State private var loadingHostID: Int?
 
     var body: some View {
         Group {
@@ -597,39 +598,82 @@ struct HostsView: View {
                     }
                 )
             } else {
-                List(service.dashboard?.dashboard.topHosts ?? []) { host in
-                    Button {
-                        selectedHostID = host.id
-                        windowHours = 24
-                        Task { await service.selectHost(host.id, hours: windowHours) }
-                    } label: {
-                        VStack(alignment: .leading, spacing: 4) {
-                            HStack {
-                                Text(host.label.isEmpty ? (host.hostname.isEmpty ? host.sourceIP : host.hostname) : host.label)
-                                    .font(.headline)
-                                Spacer()
-                                Text("\(host.count)")
-                                    .monospacedDigit()
-                                    .foregroundStyle(TMDNSTheme.olive700)
+                ScrollView {
+                    LazyVStack(spacing: 10) {
+                        ForEach(service.dashboard?.dashboard.topHosts ?? []) { host in
+                            HostListRow(
+                                host: host,
+                                isLoading: loadingHostID == host.id,
+                                isSelected: selectedHostID == host.id
+                            ) {
+                                openHost(host.id)
                             }
-                            Text(host.hostname.isEmpty ? "hostname not learned yet" : host.hostname)
-                                .font(.caption)
-                                .foregroundStyle(TMDNSTheme.stone500)
-                            Text(host.sourceIP)
-                                .font(.caption.monospaced())
-                                .foregroundStyle(TMDNSTheme.stone500)
                         }
-                        .foregroundStyle(TMDNSTheme.stone900)
                     }
-                    .buttonStyle(.plain)
-                    .padding(.vertical, 6)
-                    .listRowBackground(TMDNSTheme.olive200)
+                    .padding(16)
                 }
-                .scrollContentBackground(.hidden)
             }
         }
-        .padding(16)
         .background(TMDNSTheme.olive300)
+    }
+
+    private func openHost(_ id: Int) {
+        selectedHostID = id
+        loadingHostID = id
+        windowHours = 24
+        Task {
+            await service.selectHost(id, hours: windowHours)
+            loadingHostID = nil
+        }
+    }
+}
+
+struct HostListRow: View {
+    let host: TopHost
+    let isLoading: Bool
+    let isSelected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 14) {
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(displayName)
+                        .font(.headline)
+                        .foregroundStyle(TMDNSTheme.stone900)
+                    Text(host.hostname.isEmpty ? "hostname not learned yet" : host.hostname)
+                        .font(.caption)
+                        .foregroundStyle(TMDNSTheme.stone500)
+                    Text(host.sourceIP)
+                        .font(.caption.monospaced())
+                        .foregroundStyle(TMDNSTheme.stone500)
+                }
+                Spacer()
+                Text("\(host.count)")
+                    .font(.body.monospacedDigit().weight(.semibold))
+                    .foregroundStyle(TMDNSTheme.olive700)
+                if isLoading {
+                    ProgressView()
+                        .controlSize(.small)
+                } else {
+                    Image(systemName: "chevron.right")
+                        .foregroundStyle(TMDNSTheme.stone500)
+                }
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(isSelected ? TMDNSTheme.olive200 : TMDNSTheme.olive100, in: RoundedRectangle(cornerRadius: 8))
+            .overlay(RoundedRectangle(cornerRadius: 8).stroke(TMDNSTheme.olive400, lineWidth: 1))
+            .contentShape(RoundedRectangle(cornerRadius: 8))
+        }
+        .buttonStyle(.plain)
+        .disabled(isLoading)
+    }
+
+    private var displayName: String {
+        if !host.label.isEmpty { return host.label }
+        if !host.hostname.isEmpty { return host.hostname }
+        return host.sourceIP
     }
 }
 
