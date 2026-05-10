@@ -380,7 +380,6 @@ struct OverviewView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 HeaderCard()
-                UpdateCard()
                 MetricGrid()
                 HStack(alignment: .top, spacing: 16) {
                     RecentActivityCard(events: Array(service.dashboard?.dashboard.recent.prefix(8) ?? []))
@@ -409,14 +408,17 @@ struct HeaderCard: View {
                         .font(.system(size: 34, weight: .semibold, design: .serif))
                 }
                 Spacer()
-                HeaderSystemStats(system: service.dashboard?.system)
-                VStack(alignment: .trailing, spacing: 4) {
-                    Text(service.statusText)
-                        .font(.callout.weight(.medium))
-                        .foregroundStyle(service.isHealthy ? TMDNSTheme.olive700 : TMDNSTheme.red)
-                    Text(service.installedVersionText)
-                        .font(.caption.monospacedDigit().weight(.semibold))
-                        .foregroundStyle(TMDNSTheme.stone500)
+                VStack(alignment: .trailing, spacing: 8) {
+                    VStack(alignment: .trailing, spacing: 4) {
+                        Text(service.statusText)
+                            .font(.callout.weight(.medium))
+                            .foregroundStyle(service.isHealthy ? TMDNSTheme.olive700 : TMDNSTheme.red)
+                        Text(service.installedVersionText)
+                            .font(.caption.monospacedDigit().weight(.semibold))
+                            .foregroundStyle(TMDNSTheme.stone500)
+                    }
+                    HeaderSystemStats(system: service.dashboard?.system)
+                    HeaderUpdateControls()
                 }
             }
             Text("All your queries are belong to us")
@@ -426,6 +428,62 @@ struct HeaderCard: View {
         .foregroundStyle(TMDNSTheme.stone900)
         .background(TMDNSTheme.olive200, in: RoundedRectangle(cornerRadius: 8))
         .overlay(RoundedRectangle(cornerRadius: 8).stroke(TMDNSTheme.olive400, lineWidth: 1))
+    }
+}
+
+struct HeaderUpdateControls: View {
+    @EnvironmentObject private var service: TMDNSService
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: iconName)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(iconColor)
+            Text(service.updateStatus.message)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(TMDNSTheme.stone500)
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .frame(maxWidth: 250, alignment: .trailing)
+            if let release = service.availableUpdate {
+                Link("Notes", destination: release.htmlURL)
+                    .font(.caption.weight(.semibold))
+            }
+            Button(service.updateStatus.canInstall ? "Update" : "Check") {
+                Task {
+                    if service.updateStatus.canInstall {
+                        await service.installAvailableUpdate()
+                    } else {
+                        await service.checkForUpdates(userInitiated: true)
+                    }
+                }
+            }
+            .controlSize(.small)
+            .buttonStyle(.borderedProminent)
+            .tint(service.updateStatus.canInstall ? TMDNSTheme.green : TMDNSTheme.olive700)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
+        .background(TMDNSTheme.olive100, in: RoundedRectangle(cornerRadius: 7))
+        .overlay(RoundedRectangle(cornerRadius: 7).stroke(TMDNSTheme.olive400, lineWidth: 1))
+    }
+
+    private var iconName: String {
+        switch service.updateStatus {
+        case .available: "arrow.down.circle.fill"
+        case .downloading, .verifying, .installing: "clock.arrow.circlepath"
+        case .failed: "exclamationmark.triangle.fill"
+        case .current, .readyToInstall: "checkmark.seal.fill"
+        case .idle, .checking: "arrow.triangle.2.circlepath"
+        }
+    }
+
+    private var iconColor: Color {
+        switch service.updateStatus {
+        case .available: TMDNSTheme.green
+        case .failed: TMDNSTheme.red
+        default: TMDNSTheme.olive700
+        }
     }
 }
 
