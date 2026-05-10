@@ -224,7 +224,7 @@ struct SetupView: View {
                         Spacer()
                         StatusPill(isHealthy: service.isHealthy, text: service.isHealthy ? "API connected" : "API offline")
                     }
-                    Text("Use this checklist when turning TM-DNS into the active resolver for a network. Verify the local service first, then move clients or the router to the Mac's DNS address.")
+                    Text("Use these confirmation and troubleshooting checks after install. Verify the local service first, then validate LAN clients only when you are ready to point DNS at this Mac.")
                         .foregroundStyle(TMDNSTheme.stone500)
                 }
                 .padding(20)
@@ -235,13 +235,6 @@ struct SetupView: View {
                 LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
                     SetupStepCard(
                         number: "1",
-                        title: "Start TM-DNS",
-                        detail: "Run the resolver on the Mac that will serve DNS. Auto bind chooses the active LAN IPv4 and prefers wired Ethernet over Wi-Fi.",
-                        command: liveCommand
-                    )
-
-                    SetupStepCard(
-                        number: "2",
                         title: "Verify the app API",
                         detail: service.isHealthy ? "The native app can reach the local TM-DNS admin API." : "The native app cannot reach the admin API yet. Start TM-DNS, then refresh.",
                         command: "curl http://127.0.0.1:8080/api/dashboard"
@@ -249,42 +242,50 @@ struct SetupView: View {
                         Button("Refresh") {
                             Task { await service.refresh() }
                         }
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(.bordered)
                         .tint(TMDNSTheme.olive700)
                     }
 
                     SetupStepCard(
-                        number: "3",
+                        number: "2",
                         title: "Test DNS locally",
                         detail: "Before touching router settings, make sure this Mac can answer a DNS query directly.",
                         command: digCommand
                     )
 
                     SetupStepCard(
-                        number: "4",
+                        number: "3",
                         title: "Test LAN DNS address",
                         detail: "From the Mac or another machine on the same network, query this Mac's detected LAN DNS address: \(detectedLANIP).",
                         command: lanDigCommand
                     )
 
                     SetupStepCard(
-                        number: "5",
-                        title: "Point clients at TM-DNS",
+                        number: "4",
+                        title: "Confirm router DNS settings",
                         detail: "In UniFi, keep DHCP Mode set to DHCP Server. Set DNS Server to the Mac's static LAN IP. Do not use DHCP Relay for this.",
-                        command: "DNS Server: 192.168.222.8"
+                        command: service.detectedLANIP.map { "DNS Server: \($0)" } ?? "DNS Server: <detected LAN IP>"
+                    )
+
+                    SetupStepCard(
+                        number: "5",
+                        title: "Watch requests",
+                        detail: "After a client renews DHCP or manually points DNS here, requests should appear in Realtime and Top Hosts.",
+                        command: "sudo tcpdump -ni any port 53"
                     )
 
                     SetupStepCard(
                         number: "6",
-                        title: "Watch requests",
-                        detail: "After a client renews DHCP or manually points DNS here, requests should appear in Realtime and Top Hosts.",
-                        command: "sudo tcpdump -ni any port 53"
+                        title: "Manual daemon troubleshooting",
+                        detail: "Only use this when the launchd service is offline and you need to see foreground logs.",
+                        command: liveCommand
                     )
                 }
             }
             .padding(20)
         }
         .background(TMDNSTheme.olive300)
+        .foregroundStyle(TMDNSTheme.stone900)
     }
 }
 
@@ -299,10 +300,12 @@ struct StatusPill: View {
                 .frame(width: 8, height: 8)
             Text(text.uppercased())
                 .font(.caption.weight(.bold))
+                .foregroundStyle(TMDNSTheme.stone900)
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
         .background(TMDNSTheme.olive100.opacity(0.18), in: Capsule())
+        .foregroundStyle(TMDNSTheme.stone900)
     }
 }
 
@@ -345,6 +348,7 @@ struct SetupStepCard<Action: View>: View {
         .padding(14)
         .background(TMDNSTheme.olive200, in: RoundedRectangle(cornerRadius: 8))
         .overlay(RoundedRectangle(cornerRadius: 8).stroke(TMDNSTheme.olive400, lineWidth: 1))
+        .foregroundStyle(TMDNSTheme.stone900)
     }
 }
 
@@ -461,7 +465,7 @@ struct HeaderUpdateControls: View {
                 }
             }
             .controlSize(.small)
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(.bordered)
             .tint(service.updateStatus.canInstall ? TMDNSTheme.green : TMDNSTheme.olive700)
         }
         .padding(.horizontal, 7)
@@ -558,7 +562,7 @@ struct UpdateCard: View {
                     }
                 }
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(.bordered)
             .tint(service.updateStatus.canInstall ? TMDNSTheme.green : TMDNSTheme.olive700)
         }
         .padding(14)
@@ -649,12 +653,16 @@ struct TopDomainsCard: View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Top Domains")
                 .font(.system(size: 24, weight: .semibold, design: .serif))
+            Text("Last 48 hours")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(TMDNSTheme.stone500)
             TopDomainsList(rows: rows)
         }
         .frame(width: 360, alignment: .topLeading)
         .padding(14)
         .background(TMDNSTheme.olive200, in: RoundedRectangle(cornerRadius: 8))
         .overlay(RoundedRectangle(cornerRadius: 8).stroke(TMDNSTheme.olive400, lineWidth: 1))
+        .foregroundStyle(TMDNSTheme.stone900)
     }
 }
 
@@ -669,6 +677,7 @@ struct ActivityView: View {
         }
         .scrollContentBackground(.hidden)
         .background(TMDNSTheme.olive300)
+        .foregroundStyle(TMDNSTheme.stone900)
     }
 }
 
@@ -1084,6 +1093,7 @@ struct AuditView: View {
             .padding(20)
         }
         .background(TMDNSTheme.olive300)
+        .foregroundStyle(TMDNSTheme.stone900)
         .task {
             await service.refreshAudit()
         }
@@ -1107,7 +1117,7 @@ struct ListsView: View {
                         Button("Refresh Enabled Block Lists") {
                             Task { await service.refreshEnabledBlocklists() }
                         }
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(.bordered)
                         .tint(TMDNSTheme.olive700)
                     }
                     Text("Enable curated block lists or add a raw GitHub/custom URL. Refresh compiles enabled sources into local DNS enforcement entries.")
@@ -1137,7 +1147,7 @@ struct ListsView: View {
                                 sourceURL = ""
                             }
                         }
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(.bordered)
                         .tint(TMDNSTheme.olive700)
                     }
                 }
@@ -1189,6 +1199,7 @@ struct ListsView: View {
             .padding(20)
         }
         .background(TMDNSTheme.olive300)
+        .foregroundStyle(TMDNSTheme.stone900)
         .task {
             await service.refreshBlocklists()
         }
@@ -1209,6 +1220,7 @@ struct ListPanel<Content: View>: View {
         .padding(14)
         .background(TMDNSTheme.olive200, in: RoundedRectangle(cornerRadius: 8))
         .overlay(RoundedRectangle(cornerRadius: 8).stroke(TMDNSTheme.olive400, lineWidth: 1))
+        .foregroundStyle(TMDNSTheme.stone900)
     }
 }
 
@@ -1246,6 +1258,7 @@ struct PresetRow: View {
         }
         .padding(10)
         .background(TMDNSTheme.olive100, in: RoundedRectangle(cornerRadius: 7))
+        .foregroundStyle(TMDNSTheme.stone900)
     }
 }
 
@@ -1282,6 +1295,7 @@ struct SourceRow: View {
         }
         .padding(10)
         .background(TMDNSTheme.olive100, in: RoundedRectangle(cornerRadius: 7))
+        .foregroundStyle(TMDNSTheme.stone900)
     }
 }
 
@@ -1305,21 +1319,58 @@ struct SettingsView: View {
     @EnvironmentObject private var service: TMDNSService
 
     var body: some View {
-        Form {
-            TextField("Local API URL", text: $service.baseURLString)
-            SecureField("Admin token", text: $service.adminToken)
-            Button("Refresh Connection") {
-                Task { await service.refresh() }
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                ListPanel(title: "Connection") {
+                    VStack(alignment: .leading, spacing: 10) {
+                        TextField("Local API URL", text: $service.baseURLString)
+                            .textFieldStyle(.roundedBorder)
+                        SecureField("Admin token for LAN access", text: $service.adminToken)
+                            .textFieldStyle(.roundedBorder)
+                        HStack {
+                            Button("Refresh Connection") {
+                                Task { await service.refresh() }
+                            }
+                            .buttonStyle(.bordered)
+                            .tint(TMDNSTheme.olive700)
+                            Button("Open Web Dashboard") {
+                                service.openWebDashboard()
+                            }
+                            .buttonStyle(.bordered)
+                            .tint(TMDNSTheme.olive700)
+                        }
+                        Text("The native app and localhost web dashboard can use loopback without a login. LAN browsers still need the admin token from admin-token.txt next to the database unless TMDNS_ADMIN_TOKEN is configured.")
+                            .font(.caption)
+                            .foregroundStyle(TMDNSTheme.stone500)
+                    }
+                }
+
+                UpdateCard()
+
+                ListPanel(title: "Operational Settings") {
+                    VStack(alignment: .leading, spacing: 8) {
+                        InfoLine(label: "API URL", value: service.baseURLString)
+                        InfoLine(label: "Detected LAN IP", value: service.detectedLANIP ?? "not detected")
+                        InfoLine(label: "DNS Listener", value: service.dashboard?.dns.dnsAddr ?? "service offline")
+                        InfoLine(label: "Upstream", value: service.dashboard?.dns.upstream ?? "service offline")
+                        InfoLine(label: "Database", value: service.dashboard?.system?.dataDir ?? "service offline")
+                    }
+                }
+
+                ListPanel(title: "Appliance Checks") {
+                    VStack(alignment: .leading, spacing: 8) {
+                        let power = service.dashboard?.system?.power
+                        InfoLine(label: "Sleep", value: power?.detail ?? "power state unavailable")
+                        InfoLine(label: "Dropped Events", value: "\(service.dashboard?.dns.droppedEvents ?? 0)")
+                        InfoLine(label: "Event Queue", value: "\(service.dashboard?.dns.eventQueueDepth ?? 0)")
+                        CommandBox(command: "curl http://127.0.0.1:8080/api/diagnostics")
+                    }
+                }
             }
-            Divider()
-            UpdateCard()
-            Divider()
-            Text("The admin token is stored on the TM-DNS Mac as admin-token.txt next to the database unless TMDNS_ADMIN_TOKEN is configured.")
-                .foregroundStyle(TMDNSTheme.stone500)
+            .padding(24)
         }
-        .padding(24)
-        .scrollContentBackground(.hidden)
         .background(TMDNSTheme.olive300)
+        .foregroundStyle(TMDNSTheme.stone900)
     }
 }
 

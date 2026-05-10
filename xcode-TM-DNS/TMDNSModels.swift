@@ -59,15 +59,19 @@ struct DashboardSummary: Decodable {
 
 struct DNSRuntime: Decodable {
     let dnsAddr: String?
+    let upstream: String?
     let queries: Int?
     let blocked: Int?
     let droppedEvents: Int?
+    let eventQueueDepth: Int?
 
     enum CodingKeys: String, CodingKey {
         case dnsAddr = "dns_addr"
+        case upstream
         case queries
         case blocked
         case droppedEvents = "dropped_events"
+        case eventQueueDepth = "event_queue_depth"
     }
 }
 
@@ -76,12 +80,34 @@ struct SystemStats: Decodable {
     let residentMB: Double?
     let appStorageMB: Double?
     let diskUsedPercent: Double?
+    let dataDir: String?
+    let power: PowerStats?
 
     enum CodingKeys: String, CodingKey {
         case cpuPercent = "cpu_percent"
         case residentMB = "resident_mb"
         case appStorageMB = "app_storage_mb"
         case diskUsedPercent = "disk_used_percent"
+        case dataDir = "data_dir"
+        case power
+    }
+}
+
+struct PowerStats: Decodable {
+    let supported: Bool?
+    let sleepConfigured: Bool?
+    let systemSleepMinutes: Int?
+    let profile: String?
+    let status: String?
+    let detail: String?
+
+    enum CodingKeys: String, CodingKey {
+        case supported
+        case sleepConfigured = "sleep_configured"
+        case systemSleepMinutes = "system_sleep_minutes"
+        case profile
+        case status
+        case detail
     }
 }
 

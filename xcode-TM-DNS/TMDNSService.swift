@@ -22,6 +22,8 @@ final class TMDNSService: ObservableObject {
 
     private var pollingTask: Task<Void, Never>?
     private var updateCheckTask: Task<Void, Never>?
+    private var lastBlocklistPollAt = Date.distantPast
+    private var lastAuditPollAt = Date.distantPast
     private let releasesURL = URL(string: "https://api.github.com/repos/techmore/TM-DNS/releases/latest")!
 
     var isHealthy: Bool {
@@ -48,7 +50,7 @@ final class TMDNSService: ObservableObject {
         pollingTask = Task { [weak self] in
             while !Task.isCancelled {
                 await self?.refresh()
-                try? await Task.sleep(for: .seconds(2))
+                try? await Task.sleep(for: .seconds(5))
             }
         }
         startUpdateChecks()
@@ -63,8 +65,7 @@ final class TMDNSService: ObservableObject {
             }
             dashboard = try JSONDecoder.tmdns.decode(DashboardResponse.self, from: data)
             refreshInstalledVersionText()
-            await refreshBlocklists()
-            await refreshAudit()
+            await refreshMetadataIfNeeded()
             lastUpdated = Date()
             errorMessage = nil
             if shouldRecheckUpdateAfterVersionLoad {
@@ -173,6 +174,7 @@ final class TMDNSService: ObservableObject {
             let (presetResult, sourceResult) = try await (presetsData, sourcesData)
             blocklistPresets = try JSONDecoder.tmdns.decode([BlocklistPreset].self, from: presetResult.0)
             blocklistSources = try JSONDecoder.tmdns.decode([BlocklistSource].self, from: sourceResult.0)
+            lastBlocklistPollAt = Date()
         } catch {
             // Keep dashboard health independent from list metadata.
         }
@@ -224,8 +226,19 @@ final class TMDNSService: ObservableObject {
                 throw URLError(.badServerResponse)
             }
             auditEvents = try JSONDecoder.tmdns.decode([AuditEvent].self, from: data)
+            lastAuditPollAt = Date()
         } catch {
             // Audit visibility should not mark DNS service unhealthy.
+        }
+    }
+
+    private func refreshMetadataIfNeeded() async {
+        let now = Date()
+        if now.timeIntervalSince(lastBlocklistPollAt) > 300 {
+            await refreshBlocklists()
+        }
+        if now.timeIntervalSince(lastAuditPollAt) > 60 {
+            await refreshAudit()
         }
     }
 
