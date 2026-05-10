@@ -532,16 +532,11 @@ struct MetricGrid: View {
     var body: some View {
         let dashboard = service.dashboard?.dashboard
         let dns = service.dashboard?.dns
-        let system = service.dashboard?.system
         LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 4), spacing: 12) {
             MetricCard(title: "Queries Today", value: "\(dashboard?.queriesToday ?? 0)")
             MetricCard(title: "Blocked Today", value: "\(dashboard?.blockedToday ?? 0)")
             MetricCard(title: "Unique Hosts", value: "\(dashboard?.uniqueHosts ?? 0)")
             MetricCard(title: "Runtime Queries", value: "\(dns?.queries ?? 0)")
-            MetricCard(title: "CPU", value: percent(system?.cpuPercent))
-            MetricCard(title: "Memory", value: mb(system?.residentMB))
-            MetricCard(title: "App Storage", value: mb(system?.appStorageMB))
-            MetricCard(title: "Disk Used", value: percent(system?.diskUsedPercent))
         }
     }
 }
