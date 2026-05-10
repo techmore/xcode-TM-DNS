@@ -142,7 +142,7 @@ final class TMDNSService: ObservableObject {
 
             updateStatus = .installing(release.version)
             try await installPackageWithRelaunch(at: destination)
-            NSApplication.shared.terminate(nil)
+            await monitorInstallation(version: release.version)
         } catch {
             updateStatus = .failed("Update failed")
         }
@@ -436,6 +436,22 @@ final class TMDNSService: ObservableObject {
         _ = try await runForOutput("/usr/bin/osascript", arguments: ["-e", appleScript])
     }
 
+    private func monitorInstallation(version: String) async {
+        for _ in 0..<60 {
+            try? await Task.sleep(for: .seconds(2))
+            let receiptVersion = await packageReceiptVersion()
+            let serviceVersion = await healthVersion()
+            if receiptVersion == version || serviceVersion == version {
+                installedVersionText = "Version \(version)"
+                availableUpdate = nil
+                updateStatus = .current
+                await refresh()
+                return
+            }
+        }
+        updateStatus = .readyToInstall(version)
+    }
+
     private func run(_ launchPath: String, arguments: [String], requiredOutput: String) async throws {
         try await withCheckedThrowingContinuation { continuation in
             let process = Process()
@@ -585,8 +601,8 @@ enum UpdateStatus: Equatable {
         case .available(let version): "Update available: \(version)"
         case .downloading(let version): "Downloading \(version)"
         case .verifying(let version): "Verifying \(version)"
-        case .readyToInstall(let version): "Installer opened for \(version)"
-        case .installing(let version): "Installing \(version)"
+        case .readyToInstall(let version): "Installer started for \(version); waiting for macOS to finish"
+        case .installing(let version): "Installing \(version); keep this app open"
         case .failed(let message): message
         }
     }
@@ -594,6 +610,15 @@ enum UpdateStatus: Equatable {
     var canInstall: Bool {
         if case .available = self { return true }
         return false
+    }
+
+    var isWorking: Bool {
+        switch self {
+        case .checking, .downloading, .verifying, .installing:
+            return true
+        case .idle, .current, .available, .readyToInstall, .failed:
+            return false
+        }
     }
 }
 
