@@ -149,12 +149,17 @@ final class TMDNSService: ObservableObject {
     }
 
     private func request(path: String, method: String = "GET") -> URLRequest {
-        var request = URLRequest(url: baseURL.appending(path: path))
+        let url = Self.apiURL(baseURL: baseURL, path: path)
+        var request = URLRequest(url: url)
         request.httpMethod = method
         if !adminToken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             request.setValue("Bearer \(adminToken.trimmingCharacters(in: .whitespacesAndNewlines))", forHTTPHeaderField: "Authorization")
         }
         return request
+    }
+
+    nonisolated static func apiURL(baseURL: URL, path: String) -> URL {
+        URL(string: path, relativeTo: baseURL)?.absoluteURL ?? baseURL.appending(path: path)
     }
 
     private func data(path: String) async throws -> (Data, URLResponse) {
@@ -262,13 +267,18 @@ final class TMDNSService: ObservableObject {
     func selectHost(_ id: Int, hours: Int = 24) async {
         do {
             let window = hours == 48 ? 48 : 24
+            errorMessage = nil
             let (data, response) = try await data(path: "/api/hosts/\(id)?hours=\(window)")
             guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
                 throw URLError(.badServerResponse)
             }
             selectedHostDetail = try JSONDecoder.tmdns.decode(HostDetail.self, from: data)
+        } catch let error as DecodingError {
+            errorMessage = "Host detail data unreadable"
+            print("TM-DNS host detail decode failed: \(error)")
         } catch {
             errorMessage = "Host detail failed"
+            print("TM-DNS host detail request failed: \(error)")
         }
     }
 
