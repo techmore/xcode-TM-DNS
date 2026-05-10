@@ -21,6 +21,8 @@ enum TMDNSTheme {
 struct ContentView: View {
     @EnvironmentObject private var service: TMDNSService
     @State private var selection: AppSection = .overview
+    @State private var selectedHostID: Int?
+    @State private var hostWindowHours = 24
 
     var body: some View {
         NavigationSplitView {
@@ -54,7 +56,23 @@ struct ContentView: View {
                 case .activity:
                     ActivityView()
                 case .hosts:
-                    HostsView()
+                    HostsView { hostID in
+                        openHostDetail(hostID, hours: 24)
+                    }
+                case .hostDetail:
+                    DedicatedHostDetailView(
+                        selectedHostID: selectedHostID,
+                        windowHours: $hostWindowHours,
+                        onBack: {
+                            service.clearSelectedHost()
+                            selectedHostID = nil
+                            selection = .hosts
+                        },
+                        onWindowChange: { hours in
+                            guard let selectedHostID else { return }
+                            openHostDetail(selectedHostID, hours: hours)
+                        }
+                    )
                 case .domains:
                     DomainsView()
                 case .lists:
@@ -86,6 +104,16 @@ struct ContentView: View {
         }
         .tint(TMDNSTheme.olive700)
     }
+
+    private func openHostDetail(_ hostID: Int, hours: Int) {
+        selectedHostID = hostID
+        hostWindowHours = hours
+        service.clearSelectedHost()
+        selection = .hostDetail
+        Task {
+            await service.selectHost(hostID, hours: hours)
+        }
+    }
 }
 
 enum AppSection: String, CaseIterable, Identifiable {
@@ -93,11 +121,16 @@ enum AppSection: String, CaseIterable, Identifiable {
     case overview
     case activity
     case hosts
+    case hostDetail
     case domains
     case lists
     case audit
     case web
     case settings
+
+    static var allCases: [AppSection] {
+        [.setup, .overview, .activity, .hosts, .domains, .lists, .audit, .web, .settings]
+    }
 
     var id: String { rawValue }
 
@@ -107,6 +140,7 @@ enum AppSection: String, CaseIterable, Identifiable {
         case .overview: "Overview"
         case .activity: "Realtime"
         case .hosts: "Hosts"
+        case .hostDetail: "Host Detail"
         case .domains: "Top Domains"
         case .lists: "Block Lists"
         case .audit: "Audit"
@@ -121,6 +155,7 @@ enum AppSection: String, CaseIterable, Identifiable {
         case .overview: "gauge.with.dots.needle.67percent"
         case .activity: "waveform.path.ecg"
         case .hosts: "desktopcomputer"
+        case .hostDetail: "desktopcomputer.and.arrow.down"
         case .domains: "network"
         case .lists: "list.bullet.rectangle"
         case .audit: "checklist.checked"
@@ -579,40 +614,23 @@ struct EventRow: View {
 struct HostsView: View {
     @EnvironmentObject private var service: TMDNSService
     @State private var selectedHostID: Int?
-    @State private var windowHours = 24
     @State private var loadingHostID: Int?
+    let onOpenHost: (Int) -> Void
 
     var body: some View {
-        Group {
-            if let detail = service.selectedHostDetail {
-                HostDetailPage(
-                    detail: detail,
-                    windowHours: $windowHours,
-                    onBack: {
-                        selectedHostID = nil
-                        service.clearSelectedHost()
-                    },
-                    onWindowChange: { hours in
-                        selectedHostID = detail.host.id
-                        Task { await service.selectHost(detail.host.id, hours: hours) }
+        ScrollView {
+            LazyVStack(spacing: 10) {
+                ForEach(service.dashboard?.dashboard.topHosts ?? []) { host in
+                    HostListRow(
+                        host: host,
+                        isLoading: loadingHostID == host.id,
+                        isSelected: selectedHostID == host.id
+                    ) {
+                        openHost(host.id)
                     }
-                )
-            } else {
-                ScrollView {
-                    LazyVStack(spacing: 10) {
-                        ForEach(service.dashboard?.dashboard.topHosts ?? []) { host in
-                            HostListRow(
-                                host: host,
-                                isLoading: loadingHostID == host.id,
-                                isSelected: selectedHostID == host.id
-                            ) {
-                                openHost(host.id)
-                            }
-                        }
-                    }
-                    .padding(16)
                 }
             }
+            .padding(16)
         }
         .background(TMDNSTheme.olive300)
     }
@@ -620,10 +638,48 @@ struct HostsView: View {
     private func openHost(_ id: Int) {
         selectedHostID = id
         loadingHostID = id
-        windowHours = 24
-        Task {
-            await service.selectHost(id, hours: windowHours)
-            loadingHostID = nil
+        onOpenHost(id)
+        loadingHostID = nil
+    }
+}
+
+struct DedicatedHostDetailView: View {
+    @EnvironmentObject private var service: TMDNSService
+    let selectedHostID: Int?
+    @Binding var windowHours: Int
+    let onBack: () -> Void
+    let onWindowChange: (Int) -> Void
+
+    var body: some View {
+        Group {
+            if let detail = service.selectedHostDetail {
+                HostDetailPage(
+                    detail: detail,
+                    windowHours: $windowHours,
+                    onBack: onBack,
+                    onWindowChange: onWindowChange
+                )
+            } else {
+                VStack(spacing: 14) {
+                    ProgressView()
+                    Text(selectedHostID == nil ? "Select a host to view details." : "Loading host detail...")
+                        .font(.headline)
+                        .foregroundStyle(TMDNSTheme.stone900)
+                    if let error = service.errorMessage {
+                        Text(error)
+                            .font(.caption)
+                            .foregroundStyle(TMDNSTheme.red)
+                    }
+                    Button {
+                        onBack()
+                    } label: {
+                        Label("Back to Hosts", systemImage: "chevron.left")
+                    }
+                    .buttonStyle(.bordered)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(TMDNSTheme.olive300)
+            }
         }
     }
 }
