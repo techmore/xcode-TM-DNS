@@ -70,8 +70,12 @@ final class TMDNSService: ObservableObject {
             if shouldRecheckUpdateAfterVersionLoad {
                 await checkForUpdates()
             }
+        } catch let error as DecodingError {
+            errorMessage = "Dashboard data unreadable"
+            print("TM-DNS dashboard decode failed: \(error)")
         } catch {
             errorMessage = "Service offline"
+            print("TM-DNS dashboard refresh failed: \(error)")
         }
     }
 

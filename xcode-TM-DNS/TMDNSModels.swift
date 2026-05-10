@@ -43,6 +43,18 @@ struct DashboardSummary: Decodable {
         case topDomains = "top_domains"
         case ruleHits = "rule_hits"
     }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        queriesToday = try container.decodeIfPresent(Int.self, forKey: .queriesToday) ?? 0
+        blockedToday = try container.decodeIfPresent(Int.self, forKey: .blockedToday) ?? 0
+        uniqueHosts = try container.decodeIfPresent(Int.self, forKey: .uniqueHosts) ?? 0
+        recent = try container.decodeIfPresent([QueryEvent].self, forKey: .recent) ?? []
+        blocked = try container.decodeIfPresent([QueryEvent].self, forKey: .blocked) ?? []
+        topHosts = try container.decodeIfPresent([TopHost].self, forKey: .topHosts) ?? []
+        topDomains = try container.decodeIfPresent([TopRow].self, forKey: .topDomains) ?? []
+        ruleHits = try container.decodeIfPresent([TopRow].self, forKey: .ruleHits) ?? []
+    }
 }
 
 struct DNSRuntime: Decodable {
