@@ -116,6 +116,7 @@ struct TopRow: Decodable, Identifiable {
     var id: String { key }
     let key: String
     let count: Int
+    let percent: Double?
 }
 
 struct TopHost: Decodable, Identifiable {

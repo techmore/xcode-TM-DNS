@@ -405,10 +405,11 @@ struct HeaderCard: View {
                         .foregroundStyle(TMDNSTheme.olive950)
                         .frame(width: 42, height: 34)
                         .background(TMDNSTheme.olive100, in: RoundedRectangle(cornerRadius: 7))
-                    Label("DNS Firewall", systemImage: service.isHealthy ? "shield.checkered" : "shield.slash")
+                    Label("TM-DNS", systemImage: service.isHealthy ? "shield.checkered" : "shield.slash")
                         .font(.system(size: 34, weight: .semibold, design: .serif))
                 }
                 Spacer()
+                HeaderSystemStats(system: service.dashboard?.system)
                 VStack(alignment: .trailing, spacing: 4) {
                     Text(service.statusText)
                         .font(.callout.weight(.medium))
@@ -418,13 +419,50 @@ struct HeaderCard: View {
                         .foregroundStyle(TMDNSTheme.stone500)
                 }
             }
-            Text("Native control shell for the local TM-DNS resolver, policy dashboard, and school network visibility.")
+            Text("All your queries are belong to us")
                 .foregroundStyle(TMDNSTheme.stone500)
         }
         .padding(20)
         .foregroundStyle(TMDNSTheme.stone900)
         .background(TMDNSTheme.olive200, in: RoundedRectangle(cornerRadius: 8))
         .overlay(RoundedRectangle(cornerRadius: 8).stroke(TMDNSTheme.olive400, lineWidth: 1))
+    }
+}
+
+struct HeaderSystemStats: View {
+    let system: SystemStats?
+
+    var body: some View {
+        HStack(spacing: 8) {
+            HeaderStatChip(title: "CPU", value: percent(system?.cpuPercent))
+            HeaderStatChip(title: "MEM", value: mb(system?.residentMB))
+            HeaderStatChip(title: "APP", value: mb(system?.appStorageMB))
+            HeaderStatChip(title: "DISK", value: percent(system?.diskUsedPercent))
+        }
+    }
+}
+
+struct HeaderStatChip: View {
+    let title: String
+    let value: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title)
+                .font(.system(size: 9, weight: .black, design: .rounded))
+                .foregroundStyle(TMDNSTheme.stone500)
+            Text(value)
+                .font(.system(size: 13, weight: .semibold, design: .serif))
+                .foregroundStyle(TMDNSTheme.stone900)
+                .monospacedDigit()
+                .lineLimit(1)
+                .minimumScaleFactor(0.65)
+        }
+        .frame(width: 72, alignment: .leading)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
+        .background(TMDNSTheme.olive100, in: RoundedRectangle(cornerRadius: 7))
+        .overlay(RoundedRectangle(cornerRadius: 7).stroke(TMDNSTheme.olive400, lineWidth: 1))
     }
 }
 
@@ -926,6 +964,12 @@ struct TopDomainsList: View {
                     Text("\(row.count)")
                         .monospacedDigit()
                         .foregroundStyle(TMDNSTheme.stone500)
+                    if let percent = row.percent {
+                        Text(percentLabel(percent))
+                            .font(.caption.monospacedDigit().weight(.bold))
+                            .foregroundStyle(TMDNSTheme.olive700)
+                            .frame(width: 58, alignment: .trailing)
+                    }
                     Button("Block") {
                         Task { await service.block(domain: row.key) }
                     }
@@ -936,6 +980,10 @@ struct TopDomainsList: View {
                 Divider().overlay(TMDNSTheme.olive400.opacity(0.55))
             }
         }
+    }
+
+    private func percentLabel(_ percent: Double) -> String {
+        "\(Int(percent.rounded()))%"
     }
 }
 
