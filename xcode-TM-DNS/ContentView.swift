@@ -396,35 +396,37 @@ struct HeaderCard: View {
     @EnvironmentObject private var service: TMDNSService
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                HStack(spacing: 12) {
+        HStack(alignment: .center, spacing: 16) {
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 10) {
                     Text("DNS")
-                        .font(.system(size: 14, weight: .black, design: .rounded))
+                        .font(.system(size: 12, weight: .black, design: .rounded))
                         .foregroundStyle(TMDNSTheme.olive950)
-                        .frame(width: 42, height: 34)
+                        .frame(width: 34, height: 28)
                         .background(TMDNSTheme.olive100, in: RoundedRectangle(cornerRadius: 7))
                     Label("TM-DNS", systemImage: service.isHealthy ? "shield.checkered" : "shield.slash")
-                        .font(.system(size: 34, weight: .semibold, design: .serif))
+                        .font(.system(size: 27, weight: .semibold, design: .serif))
                 }
-                Spacer()
-                VStack(alignment: .trailing, spacing: 8) {
-                    VStack(alignment: .trailing, spacing: 4) {
-                        Text(service.statusText)
-                            .font(.callout.weight(.medium))
-                            .foregroundStyle(service.isHealthy ? TMDNSTheme.olive700 : TMDNSTheme.red)
-                        Text(service.installedVersionText)
-                            .font(.caption.monospacedDigit().weight(.semibold))
-                            .foregroundStyle(TMDNSTheme.stone500)
-                    }
-                    HeaderSystemStats(system: service.dashboard?.system)
-                    HeaderUpdateControls()
-                }
+                Text("All your queries are belong to us")
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(TMDNSTheme.stone500)
             }
-            Text("All your queries are belong to us")
-                .foregroundStyle(TMDNSTheme.stone500)
+            Spacer(minLength: 12)
+            VStack(alignment: .trailing, spacing: 5) {
+                HStack(spacing: 10) {
+                    Text(service.statusText)
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(service.isHealthy ? TMDNSTheme.olive700 : TMDNSTheme.red)
+                    Text(service.installedVersionText)
+                        .font(.caption.monospacedDigit().weight(.semibold))
+                        .foregroundStyle(TMDNSTheme.stone500)
+                }
+                HeaderSystemStats(system: service.dashboard?.system)
+                HeaderUpdateControls()
+            }
         }
-        .padding(20)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
         .foregroundStyle(TMDNSTheme.stone900)
         .background(TMDNSTheme.olive200, in: RoundedRectangle(cornerRadius: 8))
         .overlay(RoundedRectangle(cornerRadius: 8).stroke(TMDNSTheme.olive400, lineWidth: 1))
@@ -437,17 +439,17 @@ struct HeaderUpdateControls: View {
     var body: some View {
         HStack(spacing: 8) {
             Image(systemName: iconName)
-                .font(.system(size: 13, weight: .semibold))
+                .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(iconColor)
             Text(service.updateStatus.message)
-                .font(.caption.weight(.semibold))
+                .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(TMDNSTheme.stone500)
                 .lineLimit(1)
                 .truncationMode(.middle)
-                .frame(maxWidth: 250, alignment: .trailing)
+                .frame(maxWidth: 220, alignment: .trailing)
             if let release = service.availableUpdate {
                 Link("Notes", destination: release.htmlURL)
-                    .font(.caption.weight(.semibold))
+                    .font(.system(size: 11, weight: .semibold))
             }
             Button(service.updateStatus.canInstall ? "Update" : "Check") {
                 Task {
@@ -462,8 +464,8 @@ struct HeaderUpdateControls: View {
             .buttonStyle(.borderedProminent)
             .tint(service.updateStatus.canInstall ? TMDNSTheme.green : TMDNSTheme.olive700)
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 6)
+        .padding(.horizontal, 7)
+        .padding(.vertical, 4)
         .background(TMDNSTheme.olive100, in: RoundedRectangle(cornerRadius: 7))
         .overlay(RoundedRectangle(cornerRadius: 7).stroke(TMDNSTheme.olive400, lineWidth: 1))
     }
@@ -491,7 +493,7 @@ struct HeaderSystemStats: View {
     let system: SystemStats?
 
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 6) {
             HeaderStatChip(title: "CPU", value: percent(system?.cpuPercent))
             HeaderStatChip(title: "MEM", value: mb(system?.residentMB))
             HeaderStatChip(title: "APP", value: mb(system?.appStorageMB))
@@ -507,18 +509,18 @@ struct HeaderStatChip: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(title)
-                .font(.system(size: 9, weight: .black, design: .rounded))
+                .font(.system(size: 8, weight: .black, design: .rounded))
                 .foregroundStyle(TMDNSTheme.stone500)
             Text(value)
-                .font(.system(size: 13, weight: .semibold, design: .serif))
+                .font(.system(size: 12, weight: .semibold, design: .serif))
                 .foregroundStyle(TMDNSTheme.stone900)
                 .monospacedDigit()
                 .lineLimit(1)
                 .minimumScaleFactor(0.65)
         }
-        .frame(width: 72, alignment: .leading)
-        .padding(.horizontal, 8)
-        .padding(.vertical, 6)
+        .frame(width: 60, alignment: .leading)
+        .padding(.horizontal, 7)
+        .padding(.vertical, 4)
         .background(TMDNSTheme.olive100, in: RoundedRectangle(cornerRadius: 7))
         .overlay(RoundedRectangle(cornerRadius: 7).stroke(TMDNSTheme.olive400, lineWidth: 1))
     }
