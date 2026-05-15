@@ -145,7 +145,7 @@ final class TMDNSService: ObservableObject {
             try FileManager.default.moveItem(at: downloadURL, to: destination)
 
             updateStatus = .verifying(release.version)
-            try await verifyPackage(at: destination)
+            try await verifyPackage(at: destination, expectedVersion: release.version)
 
             updateStatus = .installing(release.version)
             try await installPackageWithRelaunch(at: destination)
@@ -537,9 +537,25 @@ final class TMDNSService: ObservableObject {
             .compactMap { Int($0) }
     }
 
-    private func verifyPackage(at url: URL) async throws {
+    private func verifyPackage(at url: URL, expectedVersion: String) async throws {
         try await run("/usr/sbin/pkgutil", arguments: ["--check-signature", url.path], requiredOutput: "Developer ID Installer")
         try await run("/usr/sbin/spctl", arguments: ["-a", "-vvv", "-t", "install", url.path], requiredOutput: "accepted")
+        try await verifyPackageMetadata(at: url, expectedVersion: expectedVersion)
+    }
+
+    private func verifyPackageMetadata(at url: URL, expectedVersion: String) async throws {
+        let expandURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("tm-dns-pkg-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: expandURL) }
+        _ = try await runForOutput("/usr/sbin/pkgutil", arguments: ["--expand-full", url.path, expandURL.path])
+        let packageInfoURL = expandURL.appendingPathComponent("PackageInfo")
+        let info = try String(contentsOf: packageInfoURL, encoding: .utf8)
+        guard info.contains("identifier=\"com.techmore.tmdns\"") else {
+            throw UpdateError.verificationFailed("Package identifier is not com.techmore.tmdns")
+        }
+        guard info.contains("version=\"\(expectedVersion)\"") else {
+            throw UpdateError.verificationFailed("Package version does not match \(expectedVersion)")
+        }
     }
 
     private func installPackageWithRelaunch(at packageURL: URL) async throws {
