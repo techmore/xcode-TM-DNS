@@ -385,6 +385,7 @@ struct OverviewView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 HeaderCard()
+                HARoleOverviewCard()
                 HAPairingOverviewCard()
                 MetricGrid()
                 HStack(alignment: .top, spacing: 16) {
@@ -395,6 +396,90 @@ struct OverviewView: View {
             .padding(20)
         }
         .background(TMDNSTheme.olive300)
+    }
+}
+
+struct HARoleOverviewCard: View {
+    @EnvironmentObject private var service: TMDNSService
+
+    private var ha: HAHealth? { service.dashboard?.ha }
+    private var isSecondary: Bool { ha?.role.lowercased() == "secondary" }
+    private var localTitle: String {
+        guard ha != nil else { return "This Mac: Role Loading" }
+        return isSecondary ? "This Mac: Secondary DNS" : "This Mac: Primary DNS"
+    }
+    private var peerTitle: String {
+        guard ha != nil else { return "DNS Peer" }
+        return isSecondary ? "Primary DNS Peer" : "Secondary DNS Peer"
+    }
+    private var statusText: String {
+        guard let ha else { return "Role status loading" }
+        if !ha.enabled { return "HA disabled" }
+        if !ha.configured { return isSecondary ? "Not paired to primary" : "No secondary paired" }
+        if ha.stale { return isSecondary ? "Primary heartbeat stale" : "Secondary heartbeat stale" }
+        return isSecondary ? "Primary reachable" : "Secondary reachable"
+    }
+    private var statusColor: Color {
+        guard let ha, ha.enabled, ha.configured, !ha.stale else { return TMDNSTheme.red }
+        return TMDNSTheme.green
+    }
+    private var heartbeatText: String {
+        guard let ha else { return "unknown" }
+        if let age = ha.heartbeatAgeSeconds, age >= 0 {
+            if age < 60 { return "\(age)s ago" }
+            return "\(age / 60)m ago"
+        }
+        return ha.lastHeartbeat.isEmpty ? "never" : ha.lastHeartbeat
+    }
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            rolePanel(
+                title: localTitle,
+                icon: isSecondary ? "server.rack" : "shield.lefthalf.filled",
+                lines: [
+                    service.detectedLANIP.map { "LAN IP: \($0)" } ?? "LAN IP: detecting",
+                    service.dashboard?.dns.dnsAddr.map { "DNS listener: \($0)" } ?? "DNS listener: unknown"
+                ],
+                tint: TMDNSTheme.olive700
+            )
+            rolePanel(
+                title: peerTitle,
+                icon: "point.3.connected.trianglepath.dotted",
+                lines: [
+                    "Status: \(statusText)",
+                    "Peer: \(ha?.peerName.isEmpty == false ? ha?.peerName ?? "" : "not named")",
+                    "URL: \(ha?.peerURL.isEmpty == false ? ha?.peerURL ?? "" : "not configured")",
+                    "Heartbeat: \(heartbeatText)"
+                ],
+                tint: statusColor
+            )
+        }
+    }
+
+    private func rolePanel(title: String, icon: String, lines: [String], tint: Color) -> some View {
+        VStack(alignment: .leading, spacing: 9) {
+            HStack(spacing: 8) {
+                Image(systemName: icon)
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundStyle(tint)
+                Text(title)
+                    .font(.system(size: 20, weight: .semibold, design: .serif))
+                    .foregroundStyle(TMDNSTheme.stone900)
+                Spacer()
+            }
+            ForEach(lines, id: \.self) { line in
+                Text(line)
+                    .font(.caption.monospaced())
+                    .foregroundStyle(TMDNSTheme.stone500)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .padding(14)
+        .background(TMDNSTheme.olive200, in: RoundedRectangle(cornerRadius: 8))
+        .overlay(RoundedRectangle(cornerRadius: 8).stroke(TMDNSTheme.olive400, lineWidth: 1))
     }
 }
 
