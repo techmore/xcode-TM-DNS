@@ -584,12 +584,15 @@ final class TMDNSService: ObservableObject {
             try? await Task.sleep(for: .seconds(2))
             let receiptVersion = await packageReceiptVersion()
             let serviceVersion = await healthVersion()
-            if receiptVersion == version || serviceVersion == version {
+            if serviceVersion == version {
                 installedVersionText = "Version \(version)"
                 availableUpdate = nil
                 updateStatus = .current
                 await refresh()
                 return
+            }
+            if receiptVersion == version {
+                updateStatus = .installing(version)
             }
         }
         updateStatus = .readyToInstall(version)

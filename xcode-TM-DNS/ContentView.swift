@@ -473,6 +473,13 @@ struct HeaderRedundancyStatus: View {
     @EnvironmentObject private var service: TMDNSService
     @State private var showsGuidance = false
 
+    private var roleText: String {
+        guard let role = service.dashboard?.ha?.role.lowercased(), !role.isEmpty else {
+            return "Role unknown"
+        }
+        return role == "secondary" ? "Secondary DNS" : "Primary DNS"
+    }
+
     private var shouldWarn: Bool {
         guard let ha = service.dashboard?.ha else {
             return true
@@ -484,25 +491,58 @@ struct HeaderRedundancyStatus: View {
         guard let ha = service.dashboard?.ha else {
             return "TM-DNS cannot confirm secondary DNS health yet. A single DNS server can take the network offline if this Mac is restarted, asleep, disconnected, or updating."
         }
+        let isSecondary = ha.role.lowercased() == "secondary"
         if !ha.enabled {
-            return "Secondary DNS is not enabled. Put a second onsite TM-DNS server in DHCP as backup DNS before relying on this for production."
+            return isSecondary
+                ? "This node is marked Secondary, but redundancy is disabled. Accept pairing from the Primary or enable HA before using it as backup DNS."
+                : "Secondary DNS is not enabled. Put a second onsite TM-DNS server in DHCP as backup DNS before relying on this for production."
         }
         if !ha.configured {
-            return "Secondary DNS is enabled but peer URL or peer token is missing. Complete peer setup, then run Heartbeat and Push Sync."
+            return isSecondary
+                ? "This Secondary is not paired to a Primary yet. Request join from this Mac, then accept it on the Primary dashboard."
+                : "Primary DNS is enabled but no Secondary peer is paired yet. Accept a secondary join request, then run Heartbeat and Push Sync."
         }
         if ha.stale {
-            return "Secondary DNS heartbeat is stale. Check the peer Mac, network path, admin token, and firewall access before making network-wide DNS changes."
+            return isSecondary
+                ? "Primary DNS heartbeat is stale. Check the primary Mac, network path, admin token, and firewall access before relying on failover."
+                : "Secondary DNS heartbeat is stale. Check the peer Mac, network path, admin token, and firewall access before making network-wide DNS changes."
         }
         return ""
     }
 
+    private var warningText: String {
+        guard let ha = service.dashboard?.ha else { return "HA unknown" }
+        if ha.role.lowercased() == "secondary" {
+            if !ha.enabled || !ha.configured { return "Secondary not paired" }
+            if ha.stale { return "Primary stale" }
+            return "Secondary healthy"
+        }
+        if !ha.enabled || !ha.configured { return "No secondary DNS" }
+        if ha.stale { return "Secondary stale" }
+        return "Secondary healthy"
+    }
+
     var body: some View {
-        if shouldWarn {
+        HStack(spacing: 6) {
+            Text(roleText)
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(TMDNSTheme.stone900)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 5)
+                .background(TMDNSTheme.olive100, in: RoundedRectangle(cornerRadius: 8))
+                .overlay(RoundedRectangle(cornerRadius: 8).stroke(TMDNSTheme.olive400, lineWidth: 1))
+            if shouldWarn {
+                warningChip
+            }
+        }
+    }
+
+    private var warningChip: some View {
             HStack(spacing: 6) {
                 Image(systemName: "exclamationmark.triangle.fill")
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(TMDNSTheme.red)
-                Text("No secondary DNS")
+                Text(warningText)
                     .font(.system(size: 11, weight: .bold))
                     .foregroundStyle(TMDNSTheme.stone900)
                 Button {
@@ -539,7 +579,6 @@ struct HeaderRedundancyStatus: View {
             .padding(.vertical, 5)
             .background(Color(red: 0.93, green: 0.86, blue: 0.72), in: RoundedRectangle(cornerRadius: 8))
             .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color(red: 0.69, green: 0.49, blue: 0.17), lineWidth: 1))
-        }
     }
 }
 
