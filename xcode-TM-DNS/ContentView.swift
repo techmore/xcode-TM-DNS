@@ -385,6 +385,7 @@ struct OverviewView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 HeaderCard()
+                HAPairingOverviewCard()
                 MetricGrid()
                 HStack(alignment: .top, spacing: 16) {
                     RecentActivityCard(events: Array(service.dashboard?.dashboard.recent.prefix(8) ?? []))
@@ -394,6 +395,77 @@ struct OverviewView: View {
             .padding(20)
         }
         .background(TMDNSTheme.olive300)
+    }
+}
+
+struct HAPairingOverviewCard: View {
+    @EnvironmentObject private var service: TMDNSService
+
+    private var pendingRequests: [HAJoinRequest] {
+        service.haJoinRequests.filter { $0.status == "pending" }
+    }
+
+    private var detectedNode: HADiscoveredNode? {
+        guard service.dashboard?.ha?.configured != true else { return nil }
+        return service.haDiscoveredNodes.first
+    }
+
+    var body: some View {
+        if !pendingRequests.isEmpty || detectedNode != nil {
+            VStack(alignment: .leading, spacing: 10) {
+                if !pendingRequests.isEmpty {
+                    HStack {
+                        Label("Secondary join request", systemImage: "link.badge.plus")
+                            .font(.system(size: 17, weight: .semibold, design: .serif))
+                        Spacer()
+                        Text("\(pendingRequests.count) pending")
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(TMDNSTheme.olive700)
+                    }
+                    ForEach(pendingRequests) { request in
+                        HStack(spacing: 12) {
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(request.nodeHostname.isEmpty ? request.nodeName : request.nodeHostname)
+                                    .font(.body.weight(.bold))
+                                Text([request.nodeIP, request.nodeMAC, request.nodeURL].filter { !$0.isEmpty }.joined(separator: " · "))
+                                    .font(.caption.monospaced())
+                                    .foregroundStyle(TMDNSTheme.stone500)
+                                    .lineLimit(1)
+                            }
+                            Spacer()
+                            Button("Accept") {
+                                Task { await service.acceptHAJoinRequest(request.id) }
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .tint(TMDNSTheme.olive700)
+                        }
+                    }
+                } else if let node = detectedNode {
+                    HStack(spacing: 12) {
+                        Label("Other TM-DNS detected", systemImage: "network")
+                            .font(.system(size: 17, weight: .semibold, design: .serif))
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(node.hostname.isEmpty ? node.name : node.hostname)
+                                .font(.caption.weight(.bold))
+                            Text([node.ip, node.mac, node.url].filter { !$0.isEmpty }.joined(separator: " · "))
+                                .font(.caption.monospaced())
+                                .foregroundStyle(TMDNSTheme.stone500)
+                                .lineLimit(1)
+                        }
+                        Spacer()
+                        Button("Request Join") {
+                            Task { await service.requestHAJoin(to: node) }
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(TMDNSTheme.olive700)
+                    }
+                }
+            }
+            .padding(14)
+            .foregroundStyle(TMDNSTheme.stone900)
+            .background(TMDNSTheme.olive200, in: RoundedRectangle(cornerRadius: 8))
+            .overlay(RoundedRectangle(cornerRadius: 8).stroke(TMDNSTheme.olive400, lineWidth: 1))
+        }
     }
 }
 

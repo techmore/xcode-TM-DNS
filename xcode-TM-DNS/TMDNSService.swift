@@ -320,20 +320,13 @@ final class TMDNSService: ObservableObject {
 
     func requestHAJoin(primaryURL: String, localURL: String, nodeName: String) async {
         do {
-            guard let primary = URL(string: primaryURL.trimmingCharacters(in: .whitespacesAndNewlines)) else {
+            guard URL(string: primaryURL.trimmingCharacters(in: .whitespacesAndNewlines)) != nil else {
                 throw URLError(.badURL)
             }
-            let input = HAJoinRequestInput(
-                nodeName: nodeName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "TM-DNS Secondary" : nodeName.trimmingCharacters(in: .whitespacesAndNewlines),
-                nodeURL: localURL.trimmingCharacters(in: .whitespacesAndNewlines),
-                nodeRole: "secondary",
-                nodeVersion: dashboard?.version?.version ?? "unknown",
-                requesterToken: adminToken.trimmingCharacters(in: .whitespacesAndNewlines)
-            )
-            var request = URLRequest(url: Self.apiURL(baseURL: primary, path: "/api/ha/join-requests"))
+            var request = request(path: "/api/ha/request-join", method: "POST")
             request.httpMethod = "POST"
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-            request.httpBody = try JSONEncoder().encode(input)
+            request.httpBody = try JSONEncoder().encode(["primary_url": primaryURL.trimmingCharacters(in: .whitespacesAndNewlines)])
             let (_, response) = try await URLSession.shared.data(for: request)
             guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
                 throw URLError(.badServerResponse)
@@ -342,6 +335,10 @@ final class TMDNSService: ObservableObject {
         } catch {
             errorMessage = "Join request failed"
         }
+    }
+
+    func requestHAJoin(to node: HADiscoveredNode) async {
+        await requestHAJoin(primaryURL: node.url, localURL: "", nodeName: "")
     }
 
     func acceptHAJoinRequest(_ requestID: String) async {
@@ -370,6 +367,8 @@ final class TMDNSService: ObservableObject {
         }
         if now.timeIntervalSince(lastHAPollAt) > 60 {
             await refreshHASettings()
+            await refreshHAJoinRequests()
+            await discoverHANodes()
         }
     }
 
