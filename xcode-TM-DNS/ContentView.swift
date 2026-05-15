@@ -384,6 +384,7 @@ struct OverviewView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 HeaderCard()
+                RedundancyWarningCard()
                 MetricGrid()
                 HStack(alignment: .top, spacing: 16) {
                     RecentActivityCard(events: Array(service.dashboard?.dashboard.recent.prefix(8) ?? []))
@@ -393,6 +394,60 @@ struct OverviewView: View {
             .padding(20)
         }
         .background(TMDNSTheme.olive300)
+    }
+}
+
+struct RedundancyWarningCard: View {
+    @EnvironmentObject private var service: TMDNSService
+
+    private var shouldWarn: Bool {
+        guard let ha = service.dashboard?.ha else {
+            return true
+        }
+        return !ha.enabled || !ha.configured || ha.stale
+    }
+
+    private var detail: String {
+        guard let ha = service.dashboard?.ha else {
+            return "TM-DNS cannot confirm secondary DNS health yet. A single DNS server can take the network offline if this Mac is restarted, asleep, disconnected, or updating."
+        }
+        if !ha.enabled {
+            return "Secondary DNS is not enabled. Put a second onsite TM-DNS server in DHCP as backup DNS before relying on this for production."
+        }
+        if !ha.configured {
+            return "Secondary DNS is enabled but peer URL or peer token is missing. Complete peer setup, then run Heartbeat and Push Sync."
+        }
+        if ha.stale {
+            return "Secondary DNS heartbeat is stale. Check the peer Mac, network path, admin token, and firewall access before making network-wide DNS changes."
+        }
+        return ""
+    }
+
+    var body: some View {
+        if shouldWarn {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.title3)
+                    .foregroundStyle(TMDNSTheme.red)
+                    .frame(width: 28)
+                VStack(alignment: .leading, spacing: 5) {
+                    Text("No Verified Redundant DNS Server")
+                        .font(.headline)
+                        .foregroundStyle(TMDNSTheme.stone900)
+                    Text(detail)
+                        .font(.caption)
+                        .foregroundStyle(TMDNSTheme.stone900)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text("Recommended: two wired Macs with static IPs, both advertised by DHCP as DNS servers.")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(TMDNSTheme.stone500)
+                }
+                Spacer()
+            }
+            .padding(14)
+            .background(Color(red: 0.93, green: 0.86, blue: 0.72), in: RoundedRectangle(cornerRadius: 8))
+            .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color(red: 0.69, green: 0.49, blue: 0.17), lineWidth: 1))
+        }
     }
 }
 
@@ -1317,6 +1372,11 @@ struct WebDashboardView: NSViewRepresentable {
 
 struct SettingsView: View {
     @EnvironmentObject private var service: TMDNSService
+    @State private var haEnabled = false
+    @State private var haRole = "primary"
+    @State private var haPeerName = ""
+    @State private var haPeerURL = ""
+    @State private var haPeerToken = ""
 
     var body: some View {
         ScrollView {
@@ -1366,11 +1426,90 @@ struct SettingsView: View {
                         CommandBox(command: "curl http://127.0.0.1:8080/api/diagnostics")
                     }
                 }
+
+                ListPanel(title: "Onsite Secondary DNS") {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Toggle("Enable peer heartbeat and sync", isOn: $haEnabled)
+                            .toggleStyle(.switch)
+                        Picker("Role", selection: $haRole) {
+                            Text("Primary").tag("primary")
+                            Text("Secondary").tag("secondary")
+                        }
+                        .pickerStyle(.segmented)
+                        .frame(width: 260)
+                        TextField("Peer name", text: $haPeerName)
+                            .textFieldStyle(.roundedBorder)
+                        TextField("Peer API URL, e.g. https://tm-dns-secondary.example.edu:8080", text: $haPeerURL)
+                            .textFieldStyle(.roundedBorder)
+                        SecureField(service.haSettings.hasPeerToken ? "Peer admin token saved - leave blank to keep" : "Peer admin token", text: $haPeerToken)
+                            .textFieldStyle(.roundedBorder)
+                        HStack {
+                            Button("Save Peer") {
+                                Task { await saveHASettings() }
+                            }
+                            .buttonStyle(.bordered)
+                            .tint(TMDNSTheme.olive700)
+                            Button("Heartbeat") {
+                                Task { await service.testHAPeer() }
+                            }
+                            .buttonStyle(.bordered)
+                            .tint(TMDNSTheme.olive700)
+                            Button("Push Sync") {
+                                Task { await service.syncHAPeer() }
+                            }
+                            .buttonStyle(.bordered)
+                            .tint(TMDNSTheme.olive700)
+                        }
+                        Text("Recommended deployment: two onsite Macs with static IPs. Put both IPs into DHCP DNS servers. Use HTTPS or a trusted management VLAN for peer sync, then Push Sync after policy changes.")
+                            .font(.caption)
+                            .foregroundStyle(TMDNSTheme.stone500)
+                        InfoLine(label: "Peer Status", value: service.haStatus?.error ?? service.haStatus?.status ?? service.haSettings.lastStatus.ifEmpty("not checked"))
+                        InfoLine(label: "Last Heartbeat", value: service.haSettings.lastHeartbeat.ifEmpty("never"))
+                        InfoLine(label: "Last Sync", value: service.haSettings.lastSync.ifEmpty("never"))
+                        if let result = service.haSyncResult {
+                            InfoLine(label: "Last Push", value: "\(result.status): \(result.rules) rules, \(result.staticRecords) records, \(result.blocklistSources) custom lists")
+                        }
+                        if let health = service.dashboard?.ha, health.enabled {
+                            InfoLine(label: "Automatic Heartbeat", value: health.stale ? "stale" : health.status)
+                            InfoLine(label: "Automatic Sync", value: health.role == "primary" ? "primary pushes every 5 minutes" : "secondary receives sync")
+                        }
+                    }
+                }
             }
             .padding(24)
         }
         .background(TMDNSTheme.olive300)
         .foregroundStyle(TMDNSTheme.stone900)
+        .task {
+            await service.refreshHASettings()
+            loadHASettings()
+        }
+        .onChange(of: service.haSettings) { _, _ in
+            loadHASettings()
+        }
+    }
+
+    private func loadHASettings() {
+        haEnabled = service.haSettings.enabled
+        haRole = service.haSettings.role.isEmpty ? "primary" : service.haSettings.role
+        haPeerName = service.haSettings.peerName
+        haPeerURL = service.haSettings.peerURL
+        haPeerToken = ""
+    }
+
+    private func saveHASettings() async {
+        await service.saveHASettings(HASettings(
+            enabled: haEnabled,
+            role: haRole,
+            peerName: haPeerName,
+            peerURL: haPeerURL,
+            peerToken: haPeerToken,
+            hasPeerToken: service.haSettings.hasPeerToken,
+            lastHeartbeat: service.haSettings.lastHeartbeat,
+            lastSync: service.haSettings.lastSync,
+            lastStatus: service.haSettings.lastStatus
+        ))
+        loadHASettings()
     }
 }
 
@@ -1424,6 +1563,12 @@ private func percent(_ value: Double?) -> String {
 private func mb(_ value: Double?) -> String {
     guard let value else { return "0 MB" }
     return "\(Int(value.rounded())) MB"
+}
+
+private extension String {
+    func ifEmpty(_ fallback: String) -> String {
+        isEmpty ? fallback : self
+    }
 }
 
 #Preview {

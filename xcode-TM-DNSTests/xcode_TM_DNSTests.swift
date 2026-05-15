@@ -17,4 +17,10 @@ struct xcode_TM_DNSTests {
         #expect(url.absoluteString == "http://127.0.0.1:8080/api/hosts/4?hours=24")
     }
 
+    @Test func updateErrorsAreSpecific() async throws {
+        let message = TMDNSService.userFacingUpdateError(UpdateError.commandFailed("nohup: can't detach from console: Inappropriate ioctl for device"))
+        #expect(message.contains("Installer command failed"))
+        #expect(message.contains("nohup"))
+    }
+
 }

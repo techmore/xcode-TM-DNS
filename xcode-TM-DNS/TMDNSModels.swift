@@ -5,6 +5,7 @@ struct DashboardResponse: Decodable {
     let dns: DNSRuntime
     let system: SystemStats?
     let version: VersionInfo?
+    let ha: HAHealth?
 }
 
 struct VersionInfo: Decodable {
@@ -271,6 +272,96 @@ struct BlocklistSourceCreateRequest: Encodable {
     let name: String
     let url: String
     let format: String
+}
+
+struct HASettings: Codable, Equatable {
+    var enabled: Bool
+    var role: String
+    var peerName: String
+    var peerURL: String
+    var peerToken: String
+    var hasPeerToken: Bool
+    var lastHeartbeat: String
+    var lastSync: String
+    var lastStatus: String
+
+    enum CodingKeys: String, CodingKey {
+        case enabled
+        case role
+        case peerName = "peer_name"
+        case peerURL = "peer_url"
+        case peerToken = "peer_token"
+        case hasPeerToken = "has_peer_token"
+        case lastHeartbeat = "last_heartbeat"
+        case lastSync = "last_sync"
+        case lastStatus = "last_status"
+    }
+
+    static let empty = HASettings(enabled: false, role: "primary", peerName: "", peerURL: "", peerToken: "", hasPeerToken: false, lastHeartbeat: "", lastSync: "", lastStatus: "")
+}
+
+struct HAStatus: Decodable {
+	let status: String
+	let peerURL: String
+	let peerVersion: String?
+	let peerRole: String?
+	let error: String?
+	let checkedAt: String
+
+    enum CodingKeys: String, CodingKey {
+		case status
+		case peerURL = "peer_url"
+		case peerVersion = "peer_version"
+		case peerRole = "peer_role"
+		case error
+		case checkedAt = "checked_at"
+	}
+}
+
+struct HAHealth: Decodable {
+    let enabled: Bool
+    let role: String
+    let peerName: String
+    let peerURL: String
+    let status: String
+    let lastHeartbeat: String
+    let lastSync: String
+    let heartbeatAgeSeconds: Int?
+    let stale: Bool
+    let configured: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case enabled
+        case role
+        case peerName = "peer_name"
+        case peerURL = "peer_url"
+        case status
+        case lastHeartbeat = "last_heartbeat"
+        case lastSync = "last_sync"
+        case heartbeatAgeSeconds = "heartbeat_age_seconds"
+        case stale
+        case configured
+    }
+}
+
+struct HASyncResult: Decodable {
+    let status: String
+    let peerURL: String
+    let staticRecords: Int
+    let rules: Int
+    let blocklistPresets: Int
+    let blocklistSources: Int
+    let error: String?
+
+    enum CodingKeys: String, CodingKey {
+        case status
+        case peerURL = "peer_url"
+        case staticRecords = "static_records"
+        case rules
+        case blocklistPresets = "blocklist_presets"
+        case blocklistSources = "blocklist_sources"
+        case error
+    }
 }
 
 struct BlocklistRefreshResult: Decodable, Identifiable {

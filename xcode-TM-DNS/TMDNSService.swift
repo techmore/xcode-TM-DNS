@@ -10,6 +10,9 @@ final class TMDNSService: ObservableObject {
     @Published private(set) var blocklistSources: [BlocklistSource] = []
     @Published private(set) var lastBlocklistRefresh: [BlocklistRefreshResult] = []
     @Published private(set) var auditEvents: [AuditEvent] = []
+    @Published private(set) var haSettings = HASettings.empty
+    @Published private(set) var haStatus: HAStatus?
+    @Published private(set) var haSyncResult: HASyncResult?
     @Published private(set) var lastUpdated: Date?
     @Published private(set) var errorMessage: String?
     @Published var baseURLString = "http://127.0.0.1:8080"
@@ -24,6 +27,7 @@ final class TMDNSService: ObservableObject {
     private var updateCheckTask: Task<Void, Never>?
     private var lastBlocklistPollAt = Date.distantPast
     private var lastAuditPollAt = Date.distantPast
+    private var lastHAPollAt = Date.distantPast
     private let releasesURL = URL(string: "https://api.github.com/repos/techmore/TM-DNS/releases/latest")!
 
     var isHealthy: Bool {
@@ -145,7 +149,7 @@ final class TMDNSService: ObservableObject {
             try await installPackageWithRelaunch(at: destination)
             await monitorInstallation(version: release.version)
         } catch {
-            updateStatus = .failed("Update failed")
+            updateStatus = .failed(Self.userFacingUpdateError(error))
         }
     }
 
@@ -232,6 +236,62 @@ final class TMDNSService: ObservableObject {
         }
     }
 
+    func refreshHASettings() async {
+        do {
+            let (data, response) = try await data(path: "/api/ha/settings")
+            guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+                throw URLError(.badServerResponse)
+            }
+            haSettings = try JSONDecoder.tmdns.decode(HASettings.self, from: data)
+            lastHAPollAt = Date()
+        } catch {
+            // HA settings should not mark DNS service unhealthy.
+        }
+    }
+
+    func saveHASettings(_ settings: HASettings) async {
+        do {
+            var request = request(path: "/api/ha/settings", method: "PUT")
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.httpBody = try JSONEncoder().encode(settings)
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+                throw URLError(.badServerResponse)
+            }
+            haSettings = try JSONDecoder.tmdns.decode(HASettings.self, from: data)
+        } catch {
+            errorMessage = "HA settings failed"
+        }
+    }
+
+    func testHAPeer() async {
+        do {
+            let request = request(path: "/api/ha/test", method: "POST")
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+                throw URLError(.badServerResponse)
+            }
+            haStatus = try JSONDecoder.tmdns.decode(HAStatus.self, from: data)
+            await refreshHASettings()
+        } catch {
+            errorMessage = "HA heartbeat failed"
+        }
+    }
+
+    func syncHAPeer() async {
+        do {
+            let request = request(path: "/api/ha/sync", method: "POST")
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+                throw URLError(.badServerResponse)
+            }
+            haSyncResult = try JSONDecoder.tmdns.decode(HASyncResult.self, from: data)
+            await refreshHASettings()
+        } catch {
+            errorMessage = "HA sync failed"
+        }
+    }
+
     private func refreshMetadataIfNeeded() async {
         let now = Date()
         if now.timeIntervalSince(lastBlocklistPollAt) > 300 {
@@ -239,6 +299,9 @@ final class TMDNSService: ObservableObject {
         }
         if now.timeIntervalSince(lastAuditPollAt) > 60 {
             await refreshAudit()
+        }
+        if now.timeIntervalSince(lastHAPollAt) > 60 {
+            await refreshHASettings()
         }
     }
 
@@ -444,7 +507,7 @@ final class TMDNSService: ObservableObject {
         """
         try script.write(to: scriptURL, atomically: true, encoding: .utf8)
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: scriptURL.path)
-        let command = "/usr/bin/nohup /bin/zsh \(scriptURL.path.shellQuoted) >/tmp/tm-dns-update-launch.log 2>&1 &"
+        let command = "(/bin/zsh \(scriptURL.path.shellQuoted) >/tmp/tm-dns-update-launch.log 2>&1 &)"
         let appleScript = "do shell script \(command.appleScriptQuoted) with administrator privileges"
         _ = try await runForOutput("/usr/bin/osascript", arguments: ["-e", appleScript])
     }
@@ -479,7 +542,7 @@ final class TMDNSService: ObservableObject {
                 if process.terminationStatus == 0 && output.localizedCaseInsensitiveContains(requiredOutput) {
                     continuation.resume()
                 } else {
-                    continuation.resume(throwing: UpdateError.verificationFailed)
+                    continuation.resume(throwing: UpdateError.verificationFailed(output))
                 }
             }
             do {
@@ -504,7 +567,7 @@ final class TMDNSService: ObservableObject {
                 if process.terminationStatus == 0 {
                     continuation.resume(returning: output)
                 } else {
-                    continuation.resume(throwing: UpdateError.commandFailed)
+                    continuation.resume(throwing: UpdateError.commandFailed(output))
                 }
             }
             do {
@@ -513,6 +576,13 @@ final class TMDNSService: ObservableObject {
                 continuation.resume(throwing: error)
             }
         }
+    }
+
+    nonisolated static func userFacingUpdateError(_ error: Error) -> String {
+        if let updateError = error as? UpdateError {
+            return updateError.errorDescription ?? "Update failed"
+        }
+        return "Update failed: \(error.localizedDescription)"
     }
 
     private static func detectLANIP() -> String? {
@@ -683,11 +753,30 @@ struct GitHubReleaseAsset: Decodable {
 
 enum UpdateError: Error {
     case noPackageAsset
-    case verificationFailed
-    case commandFailed
+    case verificationFailed(String)
+    case commandFailed(String)
+}
+
+extension UpdateError: LocalizedError {
+    var errorDescription: String? {
+        switch self {
+        case .noPackageAsset:
+            return "No TM-DNS package was attached to the latest release"
+        case .verificationFailed(let output):
+            return "Package verification failed: \(output.trimmedForStatus)"
+        case .commandFailed(let output):
+            return "Installer command failed: \(output.trimmedForStatus)"
+        }
+    }
 }
 
 private extension String {
+    var trimmedForStatus: String {
+        let compact = trimmingCharacters(in: .whitespacesAndNewlines)
+        guard compact.count > 180 else { return compact.isEmpty ? "no output" : compact }
+        return String(compact.prefix(180)) + "..."
+    }
+
     func trimmingSuffix(_ suffix: String) -> String {
         guard hasSuffix(suffix) else { return self }
         return String(dropLast(suffix.count))
