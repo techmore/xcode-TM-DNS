@@ -364,6 +364,65 @@ struct HASyncResult: Decodable {
     }
 }
 
+struct HAJoinRequest: Decodable, Identifiable {
+    let id: String
+    let nodeName: String
+    let nodeURL: String
+    let nodeRole: String
+    let nodeVersion: String
+    let requestedAt: String
+    let status: String
+    let hasToken: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case nodeName = "node_name"
+        case nodeURL = "node_url"
+        case nodeRole = "node_role"
+        case nodeVersion = "node_version"
+        case requestedAt = "requested_at"
+        case status
+        case hasToken = "has_token"
+    }
+}
+
+struct HAJoinRequestInput: Encodable {
+    let nodeName: String
+    let nodeURL: String
+    let nodeRole: String
+    let nodeVersion: String
+    let requesterToken: String
+
+    enum CodingKeys: String, CodingKey {
+        case nodeName = "node_name"
+        case nodeURL = "node_url"
+        case nodeRole = "node_role"
+        case nodeVersion = "node_version"
+        case requesterToken = "requester_token"
+    }
+}
+
+struct HAJoinAcceptInput: Encodable {
+    let id: String
+}
+
+struct HADiscoveredNode: Decodable, Identifiable {
+    var id: String { url }
+    let name: String
+    let url: String
+    let role: String
+    let haEnabled: Bool
+    let configured: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case name
+        case url
+        case role
+        case haEnabled = "ha_enabled"
+        case configured
+    }
+}
+
 struct BlocklistRefreshResult: Decodable, Identifiable {
     var id: String { "\(sourceName)-\(url)" }
     let sourceName: String

@@ -13,6 +13,8 @@ final class TMDNSService: ObservableObject {
     @Published private(set) var haSettings = HASettings.empty
     @Published private(set) var haStatus: HAStatus?
     @Published private(set) var haSyncResult: HASyncResult?
+    @Published private(set) var haJoinRequests: [HAJoinRequest] = []
+    @Published private(set) var haDiscoveredNodes: [HADiscoveredNode] = []
     @Published private(set) var lastUpdated: Date?
     @Published private(set) var errorMessage: String?
     @Published var baseURLString = "http://127.0.0.1:8080"
@@ -289,6 +291,72 @@ final class TMDNSService: ObservableObject {
             await refreshHASettings()
         } catch {
             errorMessage = "HA sync failed"
+        }
+    }
+
+    func refreshHAJoinRequests() async {
+        do {
+            let (data, response) = try await data(path: "/api/ha/join-requests")
+            guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+                throw URLError(.badServerResponse)
+            }
+            haJoinRequests = try JSONDecoder.tmdns.decode([HAJoinRequest].self, from: data)
+        } catch {
+            errorMessage = "Join requests failed"
+        }
+    }
+
+    func discoverHANodes() async {
+        do {
+            let (data, response) = try await data(path: "/api/ha/discover")
+            guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+                throw URLError(.badServerResponse)
+            }
+            haDiscoveredNodes = try JSONDecoder.tmdns.decode([HADiscoveredNode].self, from: data)
+        } catch {
+            errorMessage = "HA discovery failed"
+        }
+    }
+
+    func requestHAJoin(primaryURL: String, localURL: String, nodeName: String) async {
+        do {
+            guard let primary = URL(string: primaryURL.trimmingCharacters(in: .whitespacesAndNewlines)) else {
+                throw URLError(.badURL)
+            }
+            let input = HAJoinRequestInput(
+                nodeName: nodeName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "TM-DNS Secondary" : nodeName.trimmingCharacters(in: .whitespacesAndNewlines),
+                nodeURL: localURL.trimmingCharacters(in: .whitespacesAndNewlines),
+                nodeRole: "secondary",
+                nodeVersion: dashboard?.version?.version ?? "unknown",
+                requesterToken: adminToken.trimmingCharacters(in: .whitespacesAndNewlines)
+            )
+            var request = URLRequest(url: Self.apiURL(baseURL: primary, path: "/api/ha/join-requests"))
+            request.httpMethod = "POST"
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.httpBody = try JSONEncoder().encode(input)
+            let (_, response) = try await URLSession.shared.data(for: request)
+            guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+                throw URLError(.badServerResponse)
+            }
+            errorMessage = nil
+        } catch {
+            errorMessage = "Join request failed"
+        }
+    }
+
+    func acceptHAJoinRequest(_ requestID: String) async {
+        do {
+            var request = request(path: "/api/ha/join-requests/accept", method: "POST")
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.httpBody = try JSONEncoder().encode(HAJoinAcceptInput(id: requestID))
+            let (_, response) = try await URLSession.shared.data(for: request)
+            guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+                throw URLError(.badServerResponse)
+            }
+            await refreshHASettings()
+            await refreshHAJoinRequests()
+        } catch {
+            errorMessage = "Accept join failed"
         }
     }
 

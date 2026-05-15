@@ -1,4 +1,5 @@
 import AppKit
+import Foundation
 import SwiftUI
 import WebKit
 
@@ -384,7 +385,6 @@ struct OverviewView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 HeaderCard()
-                RedundancyWarningCard()
                 MetricGrid()
                 HStack(alignment: .top, spacing: 16) {
                     RecentActivityCard(events: Array(service.dashboard?.dashboard.recent.prefix(8) ?? []))
@@ -397,8 +397,9 @@ struct OverviewView: View {
     }
 }
 
-struct RedundancyWarningCard: View {
+struct HeaderRedundancyStatus: View {
     @EnvironmentObject private var service: TMDNSService
+    @State private var showsGuidance = false
 
     private var shouldWarn: Bool {
         guard let ha = service.dashboard?.ha else {
@@ -425,26 +426,45 @@ struct RedundancyWarningCard: View {
 
     var body: some View {
         if shouldWarn {
-            HStack(alignment: .top, spacing: 12) {
+            HStack(spacing: 6) {
                 Image(systemName: "exclamationmark.triangle.fill")
-                    .font(.title3)
+                    .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(TMDNSTheme.red)
-                    .frame(width: 28)
-                VStack(alignment: .leading, spacing: 5) {
-                    Text("No Verified Redundant DNS Server")
-                        .font(.headline)
-                        .foregroundStyle(TMDNSTheme.stone900)
-                    Text(detail)
-                        .font(.caption)
-                        .foregroundStyle(TMDNSTheme.stone900)
-                        .fixedSize(horizontal: false, vertical: true)
-                    Text("Recommended: two wired Macs with static IPs, both advertised by DHCP as DNS servers.")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(TMDNSTheme.stone500)
+                Text("No secondary DNS")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(TMDNSTheme.stone900)
+                Button {
+                    showsGuidance.toggle()
+                } label: {
+                    Image(systemName: "info.circle")
+                        .font(.system(size: 12, weight: .semibold))
                 }
-                Spacer()
+                .buttonStyle(.plain)
+                .foregroundStyle(TMDNSTheme.olive700)
+                .popover(isPresented: $showsGuidance, arrowEdge: .bottom) {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Redundant DNS")
+                            .font(.headline)
+                            .foregroundStyle(TMDNSTheme.stone900)
+                        Text(detail)
+                            .font(.caption)
+                            .foregroundStyle(TMDNSTheme.stone900)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Text("Recommendation")
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(TMDNSTheme.stone900)
+                        Text("Use two wired Macs with static IPs or DHCP reservations. Configure one as Primary, one as Secondary, run Heartbeat, Push Sync from the Primary, then advertise both IPs as DNS servers in DHCP.")
+                            .font(.caption)
+                            .foregroundStyle(TMDNSTheme.stone500)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .padding(14)
+                    .frame(width: 340, alignment: .leading)
+                    .background(TMDNSTheme.olive100)
+                }
             }
-            .padding(14)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 5)
             .background(Color(red: 0.93, green: 0.86, blue: 0.72), in: RoundedRectangle(cornerRadius: 8))
             .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color(red: 0.69, green: 0.49, blue: 0.17), lineWidth: 1))
         }
@@ -479,6 +499,7 @@ struct HeaderCard: View {
                     Text(service.installedVersionText)
                         .font(.caption.monospacedDigit().weight(.semibold))
                         .foregroundStyle(TMDNSTheme.stone500)
+                    HeaderRedundancyStatus()
                 }
                 HeaderSystemStats(system: service.dashboard?.system)
                 HeaderUpdateControls()
@@ -1377,6 +1398,9 @@ struct SettingsView: View {
     @State private var haPeerName = ""
     @State private var haPeerURL = ""
     @State private var haPeerToken = ""
+    @State private var joinPrimaryURL = ""
+    @State private var joinLocalURL = ""
+    @State private var joinNodeName = ""
 
     var body: some View {
         ScrollView {
@@ -1429,6 +1453,93 @@ struct SettingsView: View {
 
                 ListPanel(title: "Onsite Secondary DNS") {
                     VStack(alignment: .leading, spacing: 10) {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Pairing")
+                                .font(.headline)
+                            Text("Install TM-DNS on the second Mac, set it to Secondary, then send a join request to the Primary. The Primary must accept before sync is trusted.")
+                                .font(.caption)
+                                .foregroundStyle(TMDNSTheme.stone500)
+                            HStack {
+                                TextField("Primary API URL, e.g. http://192.168.222.8:8080", text: $joinPrimaryURL)
+                                    .textFieldStyle(.roundedBorder)
+                                TextField("This Mac API URL", text: $joinLocalURL)
+                                    .textFieldStyle(.roundedBorder)
+                            }
+                            TextField("This node name", text: $joinNodeName)
+                                .textFieldStyle(.roundedBorder)
+                            HStack {
+                                Button("Find Local Nodes") {
+                                    Task { await service.discoverHANodes() }
+                                }
+                                .buttonStyle(.bordered)
+                                .tint(TMDNSTheme.olive700)
+                                Button("Request Join") {
+                                    Task {
+                                        await service.requestHAJoin(primaryURL: joinPrimaryURL, localURL: joinLocalURL, nodeName: joinNodeName)
+                                    }
+                                }
+                                .buttonStyle(.bordered)
+                                .tint(TMDNSTheme.olive700)
+                                Button("Refresh Pending Requests") {
+                                    Task { await service.refreshHAJoinRequests() }
+                                }
+                                .buttonStyle(.bordered)
+                                .tint(TMDNSTheme.olive700)
+                            }
+                            if !service.haDiscoveredNodes.isEmpty {
+                                VStack(alignment: .leading, spacing: 6) {
+                                    Text("Discovered TM-DNS Nodes")
+                                        .font(.caption.weight(.bold))
+                                        .foregroundStyle(TMDNSTheme.stone900)
+                                    ForEach(service.haDiscoveredNodes) { node in
+                                        HStack {
+                                            VStack(alignment: .leading, spacing: 2) {
+                                                Text(node.name)
+                                                    .font(.caption.weight(.semibold))
+                                                Text("\(node.url) · \(node.role)")
+                                                    .font(.caption.monospaced())
+                                                    .foregroundStyle(TMDNSTheme.stone500)
+                                            }
+                                            Spacer()
+                                            Button("Use as Primary") {
+                                                joinPrimaryURL = node.url
+                                            }
+                                            .buttonStyle(.bordered)
+                                            .tint(TMDNSTheme.olive700)
+                                        }
+                                        .padding(8)
+                                        .background(TMDNSTheme.olive100, in: RoundedRectangle(cornerRadius: 7))
+                                    }
+                                }
+                            }
+                            if !service.haJoinRequests.filter({ $0.status == "pending" }).isEmpty {
+                                VStack(alignment: .leading, spacing: 6) {
+                                    Text("Pending Join Requests")
+                                        .font(.caption.weight(.bold))
+                                        .foregroundStyle(TMDNSTheme.stone900)
+                                    ForEach(service.haJoinRequests.filter { $0.status == "pending" }) { request in
+                                        HStack {
+                                            VStack(alignment: .leading, spacing: 2) {
+                                                Text(request.nodeName)
+                                                    .font(.caption.weight(.semibold))
+                                                Text(request.nodeURL)
+                                                    .font(.caption.monospaced())
+                                                    .foregroundStyle(TMDNSTheme.stone500)
+                                            }
+                                            Spacer()
+                                            Button("Accept") {
+                                                Task { await service.acceptHAJoinRequest(request.id) }
+                                            }
+                                            .buttonStyle(.bordered)
+                                            .tint(TMDNSTheme.green)
+                                        }
+                                        .padding(8)
+                                        .background(TMDNSTheme.olive100, in: RoundedRectangle(cornerRadius: 7))
+                                    }
+                                }
+                            }
+                        }
+                        Divider()
                         Toggle("Enable peer heartbeat and sync", isOn: $haEnabled)
                             .toggleStyle(.switch)
                         Picker("Role", selection: $haRole) {
@@ -1482,7 +1593,9 @@ struct SettingsView: View {
         .foregroundStyle(TMDNSTheme.stone900)
         .task {
             await service.refreshHASettings()
+            await service.refreshHAJoinRequests()
             loadHASettings()
+            loadJoinDefaults()
         }
         .onChange(of: service.haSettings) { _, _ in
             loadHASettings()
@@ -1495,6 +1608,15 @@ struct SettingsView: View {
         haPeerName = service.haSettings.peerName
         haPeerURL = service.haSettings.peerURL
         haPeerToken = ""
+    }
+
+    private func loadJoinDefaults() {
+        if joinLocalURL.isEmpty, let lanIP = service.detectedLANIP {
+            joinLocalURL = "http://\(lanIP):8080"
+        }
+        if joinNodeName.isEmpty {
+            joinNodeName = ProcessInfo.processInfo.hostName
+        }
     }
 
     private func saveHASettings() async {
